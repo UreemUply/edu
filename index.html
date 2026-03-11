@@ -267,29 +267,29 @@
     }
 
     .category-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
-  margin-bottom: 20px;
-}
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 20px;
+    }
 
     .cat-btn {
-  border: 1px solid #e2e8f0;
-  background: white;
-  border-radius: 18px;
-  padding: 16px 12px;
-  text-align: center;
-  cursor: pointer;
-  transition: 0.2s ease;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
-  justify-content: center;
-  min-height: 110px;
-  height: auto;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
-}
+      border: 1px solid #e2e8f0;
+      background: white;
+      border-radius: 18px;
+      padding: 16px 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      min-height: 110px;
+      height: auto;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+    }
 
     .cat-btn:hover {
       transform: translateY(-2px);
@@ -307,16 +307,16 @@
     }
 
     .cat-text {
-  margin: 0;
-  font-size: 0.82rem;
-  font-weight: 900;
-  line-height: 1.4;
-  word-break: keep-all;
-  white-space: normal;
-  overflow-wrap: break-word;
-  display: block;
-  max-width: 100%;
-}
+      margin: 0;
+      font-size: 0.82rem;
+      font-weight: 900;
+      line-height: 1.4;
+      word-break: keep-all;
+      white-space: normal;
+      overflow-wrap: break-word;
+      display: block;
+      max-width: 100%;
+    }
 
     .sop-group {
       display: none;
@@ -678,33 +678,34 @@
         font-size: 0.84rem;
       }
     }
+
     /* 카테고리 글씨 안잘리게 수정 */
-.category-grid {
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
-}
+    .category-grid {
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+    }
 
-.cat-btn {
-  min-height: 120px !important;
-  height: auto !important;
-  padding: 16px 12px !important;
-}
+    .cat-btn {
+      min-height: 120px !important;
+      height: auto !important;
+      padding: 16px 12px !important;
+    }
 
-.cat-text {
-  white-space: normal !important;
-  word-break: keep-all !important;
-  overflow-wrap: break-word !important;
-  line-height: 1.4 !important;
-}
+    .cat-text {
+      white-space: normal !important;
+      word-break: keep-all !important;
+      overflow-wrap: break-word !important;
+      line-height: 1.4 !important;
+    }
 
-@media (max-width: 640px) {
-  .cat-btn {
-    min-height: 120px !important;
-  }
+    @media (max-width: 640px) {
+      .cat-btn {
+        min-height: 120px !important;
+      }
 
-  .cat-text {
-    font-size: 0.8rem !important;
-  }
-}
+      .cat-text {
+        font-size: 0.8rem !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -874,7 +875,12 @@
     let dynamicTestAnswerKey = {};
 
     function normalizeText(value) {
-      return (value ?? "").toString().trim();
+      return (value ?? "")
+        .toString()
+        .replace(/\uFEFF/g, "")
+        .replace(/\u200B/g, "")
+        .replace(/\u00A0/g, " ")
+        .trim();
     }
 
     function getColorValue(colorName) {
@@ -1358,15 +1364,15 @@
 
         sheetData = await fetchSheetData();
 
-        sopData = sheetData.filter(row => normalizeText(row.menu).toUpperCase() === "SOP");
-        eduData = sheetData.filter(row => normalizeText(row.menu).toUpperCase() === "EDU");
-        testData = sheetData.filter(row => normalizeText(row.menu).toUpperCase() === "TEST");
-        
+        sopData = sheetData.filter(row => normalizeText(row["menu"]).replace(/\s+/g, "").toUpperCase() === "SOP");
+        eduData = sheetData.filter(row => normalizeText(row["menu"]).replace(/\s+/g, "").toUpperCase() === "EDU");
+        testData = sheetData.filter(row => normalizeText(row["menu"]).replace(/\s+/g, "").toUpperCase() === "TEST");
+
         console.log("sheetData", sheetData);
         console.log("sopData", sopData);
         console.log("eduData", eduData);
         console.log("testData", testData);
-        
+
         renderSOP(sopData);
         renderEdu(eduData);
         renderTest(testData);
@@ -1380,9 +1386,3 @@
   </script>
 </body>
 </html>
-
-
-
-
-
-
