@@ -1362,9 +1362,10 @@
         eduData = sheetData.filter(row => normalizeText(row.menu).toUpperCase() === "EDU");
         testData = sheetData.filter(row => normalizeText(row.menu).toUpperCase() === "TEST");
         
-        console.log("전체 데이터", sheetData);
-        console.log("TEST 데이터", testData);
-        console.log("첫 번째 TEST", testData[0])
+        console.log("sheetData", sheetData);
+        console.log("sopData", sopData);
+        console.log("eduData", eduData);
+        console.log("testData", testData);
         
         renderSOP(sopData);
         renderEdu(eduData);
@@ -1379,6 +1380,7 @@
   </script>
 </body>
 </html>
+
 
 
 
