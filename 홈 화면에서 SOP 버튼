@@ -1,0 +1,4 @@
+<button class="home-menu-btn" onclick="openSection('sop')">
+  <span class="home-menu-icon">📖</span>
+  <span class="home-menu-title">SOP 상황별 매뉴얼</span>
+</button>
