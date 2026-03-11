@@ -1,0 +1,1 @@
+<button class="tab-btn" id="tab-sop" onclick="switchTab('sop', event)">📖 SOP 매뉴얼</button>
