@@ -606,7 +606,7 @@
       }
     }
 
-    @media (max-width: 860px) {
+    @media (max-width: 640px) {
       .home-card {
         max-width: 100%;
       }
@@ -678,6 +678,33 @@
         font-size: 0.84rem;
       }
     }
+    /* 카테고리 글씨 안잘리게 수정 */
+.category-grid {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+}
+
+.cat-btn {
+  min-height: 120px !important;
+  height: auto !important;
+  padding: 16px 12px !important;
+}
+
+.cat-text {
+  white-space: normal !important;
+  word-break: keep-all !important;
+  overflow-wrap: break-word !important;
+  line-height: 1.4 !important;
+}
+
+@media (max-width: 640px) {
+  .cat-btn {
+    min-height: 120px !important;
+  }
+
+  .cat-text {
+    font-size: 0.8rem !important;
+  }
+}
   </style>
 </head>
 <body>
@@ -1348,6 +1375,7 @@
   </script>
 </body>
 </html>
+
 
 
 
