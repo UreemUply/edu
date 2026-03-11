@@ -1,155 +1,581 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>유림텔레콤 현장 대응 SOP 매뉴얼</title>
-    <style>
-        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-        :root { --primary: #D8006C; --primary-dark: #A50050; --primary-light: #fdf2f8; --bg: #f8fafc; --text-main: #1e293b; }
-        body { font-family: 'Pretendard', sans-serif; background-color: var(--bg); margin: 0; padding: 0; color: var(--text-main); line-height: 1.6; }
-        header { background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: white; padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; position: sticky; top: 0; z-index: 100; }
-        .header-logo { background: white; color: var(--primary); font-weight: 900; padding: 6px 12px; border-radius: 8px; }
-        .container { max-width: 800px; margin: 0 auto; padding: 15px; }
-        .tab-menu { display: flex; gap: 8px; margin-bottom: 20px; }
-        .tab-btn { flex: 1; padding: 12px 5px; border: none; background: #e2e8f0; border-radius: 10px; font-weight: bold; cursor: pointer; color: #475569; transition: 0.3s; }
-        .tab-btn.active { background: var(--primary); color: white; box-shadow: 0 4px 6px rgba(216,0,108,0.2); }
-        .section-content { display: none; animation: fadeIn 0.3s ease; }
-        .section-content.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .category-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
-        .cat-btn { background: white; border: 2px solid transparent; border-radius: 14px; padding: 12px 5px; text-align: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; flex-direction: column; align-items: center; gap: 6px; }
-        .cat-btn.active { border-color: var(--primary); background: var(--primary-light); }
-        .card { background: white; border-radius: 12px; padding: 18px; margin-bottom: 20px; border-top: 4px solid var(--primary); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
-        .situation-tag { display: block; background: #FFEBEF; color: var(--primary-dark); padding: 12px 16px; border-radius: 10px; font-size: 1rem; font-weight: 900; margin-bottom: 16px; border-left: 5px solid var(--primary); }
-        .edu-list { margin: 0; padding-left: 20px; color: #334155; }
-        .edu-list li { margin-bottom: 8px; font-weight: 500; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>유림텔레콤 현장 대응 SOP 매뉴얼</title>
+
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+    :root {
+      --primary: #D8006C;
+      --primary-dark: #A50050;
+      --primary-light: #fdf2f8;
+      --bg: #f8fafc;
+      --text-main: #1e293b;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --white: #ffffff;
+      --shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Pretendard', sans-serif;
+      background-color: var(--bg);
+      margin: 0;
+      padding: 0;
+      color: var(--text-main);
+      line-height: 1.6;
+    }
+
+    header {
+      background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+      color: white;
+      padding: 15px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom-left-radius: 20px;
+      border-bottom-right-radius: 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 6px 18px rgba(165, 0, 80, 0.18);
+    }
+
+    .header-logo {
+      background: white;
+      color: var(--primary);
+      font-weight: 900;
+      padding: 6px 12px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+
+    .header-center {
+      text-align: center;
+    }
+
+    .header-center h2 {
+      margin: 0;
+      font-size: 1.15rem;
+    }
+
+    .header-center p {
+      margin: 0;
+      font-size: 0.8rem;
+      opacity: 0.92;
+    }
+
+    .header-spacer {
+      width: 72px;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    .tab-menu {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 12px 8px;
+      border: none;
+      background: #e2e8f0;
+      border-radius: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #475569;
+      transition: 0.2s ease;
+      font-size: 0.95rem;
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 4px 10px rgba(216, 0, 108, 0.22);
+    }
+
+    .section-content {
+      display: none;
+      animation: fadeIn 0.25s ease;
+    }
+
+    .section-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .category-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .cat-btn {
+      background: var(--white);
+      border: 2px solid transparent;
+      border-radius: 14px;
+      padding: 12px 6px;
+      text-align: center;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: 0.2s ease;
+      min-height: 72px;
+    }
+
+    .cat-btn.active {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    .cat-btn .emoji {
+      font-size: 1.2rem;
+      line-height: 1;
+    }
+
+    .cat-btn .label {
+      font-size: 0.72rem;
+      margin: 0;
+      line-height: 1.2;
+      word-break: keep-all;
+    }
+
+    .card {
+      background: white;
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 16px;
+      border-top: 4px solid var(--primary);
+      box-shadow: var(--shadow);
+    }
+
+    .situation-tag {
+      display: block;
+      background: #FFEBEF;
+      color: var(--primary-dark);
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 900;
+      margin-bottom: 14px;
+      border-left: 5px solid var(--primary);
+      word-break: keep-all;
+    }
+
+    .edu-list {
+      margin: 0;
+      padding-left: 20px;
+      color: #334155;
+    }
+
+    .edu-list li {
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      padding: 10px 12px;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    .message-box {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 24px 16px;
+      text-align: center;
+      color: var(--muted);
+      box-shadow: var(--shadow);
+    }
+
+    .message-box.error {
+      border-color: #fecdd3;
+      color: #9f1239;
+      background: #fff1f2;
+    }
+
+    @media (max-width: 640px) {
+      header {
+        padding: 14px 14px;
+      }
+
+      .header-center h2 {
+        font-size: 1rem;
+      }
+
+      .header-center p {
+        font-size: 0.75rem;
+      }
+
+      .header-spacer {
+        width: 56px;
+      }
+
+      .tab-menu {
+        flex-direction: row;
+      }
+
+      .tab-btn {
+        font-size: 0.9rem;
+        padding: 11px 6px;
+      }
+
+      .category-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+  </style>
 </head>
 <body>
-
-<header>
+  <header>
     <div class="header-logo">유림텔레콤</div>
-    <div style="text-align: center;">
-        <h2 style="margin:0; font-size:1.2rem;">현장 대응 SOP</h2>
-        <p style="margin:0; font-size:0.8rem; opacity:0.9;">30초마다 실시간 자동 동기화 중</p>
+    <div class="header-center">
+      <h2>현장 대응 SOP</h2>
+      <p>30초마다 실시간 자동 동기화 중</p>
     </div>
-    <div style="width:60px;"></div>
-</header>
+    <div class="header-spacer"></div>
+  </header>
 
-<div class="container">
+  <div class="container">
     <div class="tab-menu">
-        <button class="tab-btn active" onclick="switchTab('sop', event)">📖 SOP 매뉴얼</button>
-        <button class="tab-btn" onclick="switchTab('edu', event)">📚 교육자료</button>
-        <button class="tab-btn" onclick="switchTab('test', event)">📝 테스트</button>
+      <button class="tab-btn active" onclick="switchTab('sop', event)">📖 SOP 매뉴얼</button>
+      <button class="tab-btn" onclick="switchTab('edu', event)">📚 교육자료</button>
+      <button class="tab-btn" onclick="switchTab('test', event)">📝 테스트</button>
+    </div>
+
+    <div class="status-bar">
+      <div id="sync-status">데이터를 불러오는 중...</div>
+      <div id="last-updated">마지막 동기화: -</div>
     </div>
 
     <div id="sop" class="section-content active">
-        <div class="category-grid">
-            <button class="cat-btn active" data-cat="1" onclick="loadSopData(1, this)">👋<p style="font-size:0.7rem; margin:0;">1.방문초기</p></button>
-            <button class="cat-btn" data-cat="2" onclick="loadSopData(2, this)">🏢<p style="font-size:0.7rem; margin:0;">2.통신사비교</p></button>
-            <button class="cat-btn" data-cat="3" onclick="loadSopData(3, this)">💰<p style="font-size:0.7rem; margin:0;">3.가격저항</p></button>
-            <button class="cat-btn" data-cat="4" onclick="loadSopData(4, this)">⏳<p style="font-size:0.7rem; margin:0;">4.보류/약정</p></button>
-            <button class="cat-btn" data-cat="5" onclick="loadSopData(5, this)">🎯<p style="font-size:0.7rem; margin:0;">5.클로징</p></button>
-            <button class="cat-btn" data-cat="6" onclick="loadSopData(6, this)">💡<p style="font-size:0.7rem; margin:0;">6.맞춤제안</p></button>
-            <button class="cat-btn" data-cat="7" onclick="loadSopData(7, this)">👨‍👩‍👧‍👦<p style="font-size:0.7rem; margin:0;">7.투게더결합</p></button>
-        </div>
-        <div id="sop-list-container"></div>
+      <div class="category-grid">
+        <button class="cat-btn active" data-cat="1" onclick="loadSopData(1, this)">
+          <span class="emoji">👋</span>
+          <p class="label">1. 방문초기</p>
+        </button>
+        <button class="cat-btn" data-cat="2" onclick="loadSopData(2, this)">
+          <span class="emoji">🏢</span>
+          <p class="label">2. 통신사비교</p>
+        </button>
+        <button class="cat-btn" data-cat="3" onclick="loadSopData(3, this)">
+          <span class="emoji">💰</span>
+          <p class="label">3. 가격저항</p>
+        </button>
+        <button class="cat-btn" data-cat="4" onclick="loadSopData(4, this)">
+          <span class="emoji">⏳</span>
+          <p class="label">4. 보류/약정</p>
+        </button>
+        <button class="cat-btn" data-cat="5" onclick="loadSopData(5, this)">
+          <span class="emoji">🎯</span>
+          <p class="label">5. 클로징</p>
+        </button>
+        <button class="cat-btn" data-cat="6" onclick="loadSopData(6, this)">
+          <span class="emoji">💡</span>
+          <p class="label">6. 맞춤제안</p>
+        </button>
+        <button class="cat-btn" data-cat="7" onclick="loadSopData(7, this)">
+          <span class="emoji">👨‍👩‍👧‍👦</span>
+          <p class="label">7. 투게더결합</p>
+        </button>
+      </div>
+
+      <div id="sop-list-container"></div>
     </div>
 
     <div id="edu" class="section-content">
-        <h3 style="text-align:center; color:var(--primary);">📚 실시간 교육 자료</h3>
-        <div id="edu-list-container"></div>
+      <div id="edu-list-container"></div>
     </div>
 
     <div id="test" class="section-content">
-        <div class="card"><p style="text-align:center;">📝 테스트 기능 준비 중입니다.</p></div>
+      <div class="card">
+        <p style="text-align:center; margin:0;">📝 테스트 기능 준비 중입니다.</p>
+      </div>
     </div>
-</div>
+  </div>
 
-<script>
+  <script>
     const SOP_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vROVBZlJbe3DKK0q9NT8aYjcob7lhscT_O88TrdqhfUMWx1vIWX0vSiEH4M0Iq1iebOCe6Z_W20_cWM/pub?gid=1967322363&single=true&output=csv';
     const EDU_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vROVBZlJbe3DKK0q9NT8aYjcob7lhscT_O88TrdqhfUMWx1vIWX0vSiEH4M0Iq1iebOCe6Z_W20_cWM/pub?gid=0&single=true&output=csv';
 
-    function parseCSV(text) {
-        const rows = text.split('\n').filter(row => row.trim() !== '');
-        return rows.slice(1).map(row => row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/));
+    const syncStatusEl = document.getElementById('sync-status');
+    const lastUpdatedEl = document.getElementById('last-updated');
+
+    function setStatus(text) {
+      syncStatusEl.textContent = text;
     }
 
-    async function loadSopData(categoryNum, btn) {
-        if(btn) {
-            document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+    function setLastUpdated() {
+      const now = new Date();
+      const formatted = now.toLocaleString('ko-KR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      lastUpdatedEl.textContent = `마지막 동기화: ${formatted}`;
+    }
+
+    function escapeHtml(str = '') {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function normalizeCell(value = '') {
+      let v = String(value).trim();
+      if (v.startsWith('"') && v.endsWith('"')) {
+        v = v.slice(1, -1);
+      }
+      return v.replace(/""/g, '"').replace(/\r/g, '').trim();
+    }
+
+    function parseCSV(text) {
+      const rows = [];
+      let row = [];
+      let cell = '';
+      let inQuotes = false;
+
+      const normalized = text.replace(/^\uFEFF/, '');
+
+      for (let i = 0; i < normalized.length; i++) {
+        const char = normalized[i];
+        const next = normalized[i + 1];
+
+        if (char === '"') {
+          if (inQuotes && next === '"') {
+            cell += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          row.push(cell);
+          cell = '';
+        } else if ((char === '\n' || char === '\r') && !inQuotes) {
+          if (char === '\r' && next === '\n') i++;
+          row.push(cell);
+          rows.push(row);
+          row = [];
+          cell = '';
+        } else {
+          cell += char;
         }
-        const container = document.getElementById('sop-list-container');
-        try {
-            const res = await fetch(`${SOP_URL}&t=${new Date().getTime()}`);
-            const text = await res.text();
-            const data = parseCSV(text);
-            let html = '';
-            data.forEach(cols => {
-                if (cols.length >= 3) {
-                    const cat = cols[0].replace(/"/g, '').trim(); 
-                    const title = cols[1].replace(/"/g, '').trim(); 
-                    const body = cols[2].replace(/"/g, '').trim();
-                    if (cat == categoryNum) {
-                        const listItems = body.split('|').map(item => `<li>${item.trim()}</li>`).join('');
-                        html += `<div class="card"><div class="situation-tag">${title}</div><ul class="edu-list">${listItems}</ul></div>`;
-                    }
-                }
-            });
-            container.innerHTML = html || '<p style="text-align:center; padding:20px;">데이터가 없습니다.</p>';
-        } catch (e) { console.error("SOP 로드 실패"); }
+      }
+
+      row.push(cell);
+      rows.push(row);
+
+      return rows
+        .filter(r => r.some(col => String(col).trim() !== ''))
+        .map(r => r.map(normalizeCell));
+    }
+
+    async function fetchCSV(url) {
+      const response = await fetch(`${url}&t=${Date.now()}`, {
+        method: 'GET',
+        cache: 'no-store'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const text = await response.text();
+      return parseCSV(text);
+    }
+
+    function renderMessage(container, message, isError = false) {
+      container.innerHTML = `
+        <div class="message-box ${isError ? 'error' : ''}">
+          ${escapeHtml(message)}
+        </div>
+      `;
+    }
+
+    function renderCards(items, container) {
+      if (!items.length) {
+        renderMessage(container, '데이터가 없습니다.');
+        return;
+      }
+
+      const html = items.map(item => {
+        const safeTitle = escapeHtml(item.title);
+        const listHtml = item.list.length
+          ? item.list.map(text => `<li>${escapeHtml(text)}</li>`).join('')
+          : '<li>내용 없음</li>';
+
+        return `
+          <div class="card">
+            <div class="situation-tag">${safeTitle}</div>
+            <ul class="edu-list">${listHtml}</ul>
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML = html;
+    }
+
+    async function loadSopData(categoryNum, btn = null) {
+      const container = document.getElementById('sop-list-container');
+
+      if (btn) {
+        document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      }
+
+      setStatus('SOP 데이터를 불러오는 중...');
+      renderMessage(container, '불러오는 중입니다...');
+
+      try {
+        const rows = await fetchCSV(SOP_URL);
+
+        if (rows.length <= 1) {
+          renderMessage(container, 'SOP 데이터가 비어 있습니다.');
+          setStatus('SOP 데이터가 비어 있습니다.');
+          return;
+        }
+
+        const dataRows = rows.slice(1);
+
+        const items = dataRows
+          .filter(cols => cols.length >= 3)
+          .map(cols => ({
+            cat: normalizeCell(cols[0]),
+            title: normalizeCell(cols[1]),
+            body: normalizeCell(cols[2])
+          }))
+          .filter(item => String(item.cat) === String(categoryNum))
+          .map(item => ({
+            title: item.title,
+            list: item.body
+              .split('|')
+              .map(v => v.trim())
+              .filter(Boolean)
+          }));
+
+        renderCards(items, container);
+        setStatus(`SOP 카테고리 ${categoryNum}번 동기화 완료`);
+        setLastUpdated();
+      } catch (error) {
+        console.error('SOP 로드 실패:', error);
+        renderMessage(container, `SOP 데이터를 불러오지 못했습니다. (${error.message})`, true);
+        setStatus('SOP 동기화 실패');
+      }
     }
 
     async function loadEduData() {
-        const container = document.getElementById('edu-list-container');
-        try {
-            const res = await fetch(`${EDU_URL}&t=${new Date().getTime()}`);
-            const text = await res.text();
-            const data = parseCSV(text);
-            let html = '';
-            data.forEach(cols => {
-                if (cols.length >= 2) {
-                    const title = cols[0].replace(/"/g, '').trim(); 
-                    const body = cols[1].replace(/"/g, '').trim();
-                    const listItems = body.split('|').map(item => `<li>${item.trim()}</li>`).join('');
-                    html += `<div class="card"><div class="situation-tag">${title}</div><ul class="edu-list">${listItems}</ul></div>`;
-                }
-            });
-            container.innerHTML = html || '<p style="text-align:center; padding:20px;">데이터가 없습니다.</p>';
-        } catch (e) { console.error("교육자료 로드 실패"); }
-    }
+      const container = document.getElementById('edu-list-container');
 
-    function switchTab(id, e) {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.section-content').forEach(s => s.classList.remove('active'));
-        e.target.classList.add('active');
-        document.getElementById(id).classList.add('active');
-        if(id === 'sop') {
-            const activeCat = document.querySelector('.cat-btn.active').getAttribute('data-cat');
-            loadSopData(activeCat);
+      setStatus('교육자료를 불러오는 중...');
+      renderMessage(container, '불러오는 중입니다...');
+
+      try {
+        const rows = await fetchCSV(EDU_URL);
+
+        if (rows.length <= 1) {
+          renderMessage(container, '교육자료 데이터가 비어 있습니다.');
+          setStatus('교육자료 데이터가 비어 있습니다.');
+          return;
         }
-        if(id === 'edu') loadEduData();
+
+        const dataRows = rows.slice(1);
+
+        const items = dataRows
+          .filter(cols => cols.length >= 2)
+          .map(cols => ({
+            title: normalizeCell(cols[0]),
+            body: normalizeCell(cols[1])
+          }))
+          .filter(item => item.title || item.body)
+          .map(item => ({
+            title: item.title,
+            list: item.body
+              .split('|')
+              .map(v => v.trim())
+              .filter(Boolean)
+          }));
+
+        renderCards(items, container);
+        setStatus('교육자료 동기화 완료');
+        setLastUpdated();
+      } catch (error) {
+        console.error('교육자료 로드 실패:', error);
+        renderMessage(container, `교육자료를 불러오지 못했습니다. (${error.message})`, true);
+        setStatus('교육자료 동기화 실패');
+      }
     }
 
-    // --- 형님이 말씀하신 30초 자동 업데이트 로직 ---
+    function switchTab(id, event) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.section-content').forEach(section => section.classList.remove('active'));
+
+      event.currentTarget.classList.add('active');
+      document.getElementById(id).classList.add('active');
+
+      if (id === 'sop') {
+        const activeCatBtn = document.querySelector('.cat-btn.active');
+        const activeCat = activeCatBtn ? activeCatBtn.getAttribute('data-cat') : '1';
+        loadSopData(activeCat);
+      } else if (id === 'edu') {
+        loadEduData();
+      } else {
+        setStatus('테스트 탭');
+      }
+    }
+
     setInterval(() => {
-        const isSopActive = document.getElementById('sop').classList.contains('active');
-        const isEduActive = document.getElementById('edu').classList.contains('active');
+      const isSopActive = document.getElementById('sop').classList.contains('active');
+      const isEduActive = document.getElementById('edu').classList.contains('active');
 
-        if (isSopActive) {
-            const activeCatBtn = document.querySelector('.cat-btn.active');
-            if (activeCatBtn) {
-                const currentCatNum = activeCatBtn.getAttribute('data-cat');
-                loadSopData(currentCatNum);
-            }
-        } else if (isEduActive) {
-            loadEduData();
-        }
-    }, 30000); // 정확히 30초
+      if (isSopActive) {
+        const activeCatBtn = document.querySelector('.cat-btn.active');
+        const currentCatNum = activeCatBtn ? activeCatBtn.getAttribute('data-cat') : '1';
+        loadSopData(currentCatNum);
+      } else if (isEduActive) {
+        loadEduData();
+      }
+    }, 30000);
 
-    window.onload = () => loadSopData(1);
-</script>
+    window.addEventListener('load', () => {
+      loadSopData(1, document.querySelector('.cat-btn[data-cat="1"]'));
+    });
+  </script>
 </body>
 </html>
