@@ -267,28 +267,29 @@
     }
 
     .category-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 10px;
-      margin-bottom: 20px;
-    }
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
 
     .cat-btn {
-      border: 1px solid #e2e8f0;
-      background: white;
-      border-radius: 18px;
-      padding: 14px 10px;
-      text-align: center;
-      cursor: pointer;
-      transition: 0.2s ease;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      align-items: center;
-      justify-content: center;
-      min-height: 98px;
-      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
-    }
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 18px;
+  padding: 16px 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-height: 110px;
+  height: auto;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
 
     .cat-btn:hover {
       transform: translateY(-2px);
@@ -306,12 +307,16 @@
     }
 
     .cat-text {
-      margin: 0;
-      font-size: 0.82rem;
-      font-weight: 900;
-      line-height: 1.25;
-      word-break: keep-all;
-    }
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1.4;
+  word-break: keep-all;
+  white-space: normal;
+  overflow-wrap: break-word;
+  display: block;
+  max-width: 100%;
+}
 
     .sop-group {
       display: none;
@@ -1343,5 +1348,6 @@
   </script>
 </body>
 </html>
+
 
 
