@@ -32,7 +32,7 @@
     <div class="header-logo">유림텔레콤</div>
     <div style="text-align: center;">
         <h2 style="margin:0; font-size:1.2rem;">현장 대응 SOP</h2>
-        <p style="margin:0; font-size:0.8rem; opacity:0.9;">실시간 데이터 연동 중</p>
+        <p style="margin:0; font-size:0.8rem; opacity:0.9;">30초마다 실시간 자동 동기화 중</p>
     </div>
     <div style="width:60px;"></div>
 </header>
@@ -46,24 +46,20 @@
 
     <div id="sop" class="section-content active">
         <div class="category-grid">
-            <button class="cat-btn active" onclick="loadSopData(1, this)">👋<p style="font-size:0.7rem; margin:0;">1.방문초기</p></button>
-            <button class="cat-btn" onclick="loadSopData(2, this)">🏢<p style="font-size:0.7rem; margin:0;">2.통신사비교</p></button>
-            <button class="cat-btn" onclick="loadSopData(3, this)">💰<p style="font-size:0.7rem; margin:0;">3.가격저항</p></button>
-            <button class="cat-btn" onclick="loadSopData(4, this)">⏳<p style="font-size:0.7rem; margin:0;">4.보류/약정</p></button>
-            <button class="cat-btn" onclick="loadSopData(5, this)">🎯<p style="font-size:0.7rem; margin:0;">5.클로징</p></button>
-            <button class="cat-btn" onclick="loadSopData(6, this)">💡<p style="font-size:0.7rem; margin:0;">6.맞춤제안</p></button>
-            <button class="cat-btn" onclick="loadSopData(7, this)">👨‍👩‍👧‍👦<p style="font-size:0.7rem; margin:0;">7.투게더결합</p></button>
+            <button class="cat-btn active" data-cat="1" onclick="loadSopData(1, this)">👋<p style="font-size:0.7rem; margin:0;">1.방문초기</p></button>
+            <button class="cat-btn" data-cat="2" onclick="loadSopData(2, this)">🏢<p style="font-size:0.7rem; margin:0;">2.통신사비교</p></button>
+            <button class="cat-btn" data-cat="3" onclick="loadSopData(3, this)">💰<p style="font-size:0.7rem; margin:0;">3.가격저항</p></button>
+            <button class="cat-btn" data-cat="4" onclick="loadSopData(4, this)">⏳<p style="font-size:0.7rem; margin:0;">4.보류/약정</p></button>
+            <button class="cat-btn" data-cat="5" onclick="loadSopData(5, this)">🎯<p style="font-size:0.7rem; margin:0;">5.클로징</p></button>
+            <button class="cat-btn" data-cat="6" onclick="loadSopData(6, this)">💡<p style="font-size:0.7rem; margin:0;">6.맞춤제안</p></button>
+            <button class="cat-btn" data-cat="7" onclick="loadSopData(7, this)">👨‍👩‍👧‍👦<p style="font-size:0.7rem; margin:0;">7.투게더결합</p></button>
         </div>
-        <div id="sop-list-container">
-            <p style="text-align:center; padding:30px;">데이터를 불러오는 중...</p>
-        </div>
+        <div id="sop-list-container"></div>
     </div>
 
     <div id="edu" class="section-content">
         <h3 style="text-align:center; color:var(--primary);">📚 실시간 교육 자료</h3>
-        <div id="edu-list-container">
-            <p style="text-align:center; padding:30px;">데이터를 불러오는 중...</p>
-        </div>
+        <div id="edu-list-container"></div>
     </div>
 
     <div id="test" class="section-content">
@@ -72,58 +68,47 @@
 </div>
 
 <script>
-    // 형님이 주신 링크들입니다.
     const SOP_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vROVBZlJbe3DKK0q9NT8aYjcob7lhscT_O88TrdqhfUMWx1vIWX0vSiEH4M0Iq1iebOCe6Z_W20_cWM/pub?gid=1967322363&single=true&output=csv';
     const EDU_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vROVBZlJbe3DKK0q9NT8aYjcob7lhscT_O88TrdqhfUMWx1vIWX0vSiEH4M0Iq1iebOCe6Z_W20_cWM/pub?gid=0&single=true&output=csv';
 
-    // CSV 파싱 공통 함수 (따옴표 내 쉼표 무시)
     function parseCSV(text) {
         const rows = text.split('\n').filter(row => row.trim() !== '');
         return rows.slice(1).map(row => row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/));
     }
 
-    // 1. SOP 데이터 로드
     async function loadSopData(categoryNum, btn) {
         if(btn) {
             document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
         }
         const container = document.getElementById('sop-list-container');
-        container.innerHTML = '<p style="text-align:center;">로딩 중...</p>';
-
         try {
             const res = await fetch(`${SOP_URL}&t=${new Date().getTime()}`);
             const text = await res.text();
             const data = parseCSV(text);
             let html = '';
-
             data.forEach(cols => {
                 if (cols.length >= 3) {
                     const cat = cols[0].replace(/"/g, '').trim(); 
                     const title = cols[1].replace(/"/g, '').trim(); 
                     const body = cols[2].replace(/"/g, '').trim();
-
                     if (cat == categoryNum) {
                         const listItems = body.split('|').map(item => `<li>${item.trim()}</li>`).join('');
                         html += `<div class="card"><div class="situation-tag">${title}</div><ul class="edu-list">${listItems}</ul></div>`;
                     }
                 }
             });
-            container.innerHTML = html || '<p style="text-align:center;">해당 분류에 데이터가 없습니다.</p>';
-        } catch (e) { container.innerHTML = '<p>데이터 연동 실패</p>'; }
+            container.innerHTML = html || '<p style="text-align:center; padding:20px;">데이터가 없습니다.</p>';
+        } catch (e) { console.error("SOP 로드 실패"); }
     }
 
-    // 2. 교육자료 데이터 로드
     async function loadEduData() {
         const container = document.getElementById('edu-list-container');
-        container.innerHTML = '<p style="text-align:center;">로딩 중...</p>';
-
         try {
             const res = await fetch(`${EDU_URL}&t=${new Date().getTime()}`);
             const text = await res.text();
             const data = parseCSV(text);
             let html = '';
-
             data.forEach(cols => {
                 if (cols.length >= 2) {
                     const title = cols[0].replace(/"/g, '').trim(); 
@@ -132,22 +117,38 @@
                     html += `<div class="card"><div class="situation-tag">${title}</div><ul class="edu-list">${listItems}</ul></div>`;
                 }
             });
-            container.innerHTML = html || '<p>데이터가 없습니다.</p>';
-        } catch (e) { container.innerHTML = '<p>데이터 연동 실패</p>'; }
+            container.innerHTML = html || '<p style="text-align:center; padding:20px;">데이터가 없습니다.</p>';
+        } catch (e) { console.error("교육자료 로드 실패"); }
     }
 
-    // 탭 전환
     function switchTab(id, e) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.section-content').forEach(s => s.classList.remove('active'));
         e.target.classList.add('active');
         document.getElementById(id).classList.add('active');
-        
-        if(id === 'sop') loadSopData(1);
+        if(id === 'sop') {
+            const activeCat = document.querySelector('.cat-btn.active').getAttribute('data-cat');
+            loadSopData(activeCat);
+        }
         if(id === 'edu') loadEduData();
     }
 
-    // 초기 실행
+    // --- 형님이 말씀하신 30초 자동 업데이트 로직 ---
+    setInterval(() => {
+        const isSopActive = document.getElementById('sop').classList.contains('active');
+        const isEduActive = document.getElementById('edu').classList.contains('active');
+
+        if (isSopActive) {
+            const activeCatBtn = document.querySelector('.cat-btn.active');
+            if (activeCatBtn) {
+                const currentCatNum = activeCatBtn.getAttribute('data-cat');
+                loadSopData(currentCatNum);
+            }
+        } else if (isEduActive) {
+            loadEduData();
+        }
+    }, 30000); // 정확히 30초
+
     window.onload = () => loadSopData(1);
 </script>
 </body>
