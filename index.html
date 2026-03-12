@@ -646,51 +646,14 @@
       padding: 10px;
     }
 
-    .edu-gallery-img-btn {
-      width: 100%;
-      border: none;
-      background: #f8fafc;
-      padding: 0;
-      cursor: pointer;
-      border-radius: 12px;
-      overflow: hidden;
-    }
-
     .edu-gallery-img {
       width: 100%;
       height: 220px;
       object-fit: contain;
       display: block;
       background: #f8fafc;
-    }
-
-    .edu-gallery-actions {
-      display: flex;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .edu-action-btn,
-    .edu-save-btn {
-      flex: 1;
-      border: none;
-      border-radius: 10px;
-      padding: 10px 12px;
-      font-size: 0.88rem;
-      font-weight: 800;
       cursor: pointer;
-      text-decoration: none;
-      text-align: center;
-    }
-
-    .edu-action-btn {
-      background: #f1f5f9;
-      color: #334155;
-    }
-
-    .edu-save-btn {
-      background: linear-gradient(135deg, var(--primary-dark), var(--primary));
-      color: white;
+      border-radius: 12px;
     }
 
     .edu-modal-body {
@@ -745,7 +708,7 @@
     .edu-lightbox-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.82);
+      background: rgba(0,0,0,0.86);
       z-index: 1200;
     }
 
@@ -768,9 +731,60 @@
       height: 46px;
       border: none;
       border-radius: 50%;
-      background: rgba(255,255,255,0.9);
+      background: rgba(255,255,255,0.92);
       font-size: 28px;
       cursor: pointer;
+    }
+
+    .edu-lightbox-counter {
+      position: absolute;
+      top: 2px;
+      left: 0;
+      color: white;
+      font-weight: 800;
+      background: rgba(0,0,0,0.5);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 0.92rem;
+    }
+
+    .edu-lightbox-stage {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: 64px 1fr 64px;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .edu-lightbox-nav {
+      width: 52px;
+      height: 52px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.92);
+      color: #111827;
+      font-size: 28px;
+      font-weight: 900;
+      cursor: pointer;
+      justify-self: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .edu-lightbox-nav:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+
+    .edu-lightbox-img-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
     }
 
     .edu-lightbox-img {
@@ -780,34 +794,8 @@
       border-radius: 16px;
       background: #fff;
       padding: 8px;
-    }
-
-    .edu-lightbox-actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-
-    .edu-lightbox-link {
-      border: none;
-      border-radius: 12px;
-      padding: 12px 16px;
-      font-size: 0.92rem;
-      font-weight: 800;
-      cursor: pointer;
-      text-decoration: none;
-      text-align: center;
-    }
-
-    .edu-lightbox-link.view {
-      background: #fff;
-      color: #111827;
-    }
-
-    .edu-lightbox-link.save {
-      background: linear-gradient(135deg, var(--primary-dark), var(--primary));
-      color: #fff;
+      user-select: none;
+      -webkit-user-drag: none;
     }
 
     .role-select {
@@ -1093,6 +1081,16 @@
       .edu-lightbox-content {
         inset: 12px;
       }
+
+      .edu-lightbox-stage {
+        grid-template-columns: 48px 1fr 48px;
+      }
+
+      .edu-lightbox-nav {
+        width: 42px;
+        height: 42px;
+        font-size: 24px;
+      }
     }
 
     .category-grid {
@@ -1189,7 +1187,7 @@
         <div class="section-header">
           <div class="section-title-wrap">
             <h3>📚 상품자료</h3>
-            <p>구글시트에서 수정한 상품자료가 카테고리별 카드 형태로 반영됩니다.</p>
+            <p>사진 클릭 후 길게 누르면 이미지 저장 가능합니다.</p>
           </div>
           <div class="data-badge" id="edu-count-badge">로딩 중...</div>
         </div>
@@ -1292,11 +1290,17 @@
   <div class="edu-lightbox" id="eduLightbox">
     <div class="edu-lightbox-backdrop" id="eduLightboxBackdrop"></div>
     <div class="edu-lightbox-content">
+      <div class="edu-lightbox-counter" id="eduLightboxCounter">1 / 1</div>
       <button class="edu-lightbox-close" id="eduLightboxClose">×</button>
-      <img id="eduLightboxImg" class="edu-lightbox-img" src="" alt="확대 이미지">
-      <div class="edu-lightbox-actions">
-        <a id="eduLightboxView" class="edu-lightbox-link view" href="#" target="_blank" rel="noopener noreferrer">새 창에서 보기</a>
-        <a id="eduLightboxSave" class="edu-lightbox-link save" href="#" download="product-image">저장하기</a>
+
+      <div class="edu-lightbox-stage">
+        <button class="edu-lightbox-nav" id="eduPrevBtn" type="button" aria-label="이전 이미지">‹</button>
+
+        <div class="edu-lightbox-img-wrap">
+          <img id="eduLightboxImg" class="edu-lightbox-img" src="" alt="확대 이미지">
+        </div>
+
+        <button class="edu-lightbox-nav" id="eduNextBtn" type="button" aria-label="다음 이미지">›</button>
       </div>
     </div>
   </div>
@@ -1334,6 +1338,10 @@
     let dynamicTestAnswerKey = {};
     let currentEduCategory = "all";
 
+    let currentLightboxImages = [];
+    let currentLightboxIndex = 0;
+    let currentLightboxTitle = "";
+
     const FALLBACK_EDU_DATA = [
       {
         id: "1",
@@ -1341,6 +1349,7 @@
         title: "고객이 매장에 들어왔는데 말이 없을 때",
         desc: "첫 인사와 착석 유도, 자연스러운 대화 시작 흐름",
         images: [],
+        image: "",
         icon: "💬",
         meta: "고객응대 · 기초",
         points: [
@@ -1854,13 +1863,13 @@
 
       return images.map((img, idx) => `
         <div class="edu-gallery-item">
-          <button class="edu-gallery-img-btn" type="button" onclick="openImageLightbox('${escapeHtml(img)}', '${escapeHtml(title)}')">
-            <img class="edu-gallery-img" src="${escapeHtml(img)}" alt="${escapeHtml(title)} ${idx + 1}" loading="lazy">
-          </button>
-          <div class="edu-gallery-actions">
-            <button class="edu-action-btn" type="button" onclick="openImageLightbox('${escapeHtml(img)}', '${escapeHtml(title)}')">크게 보기</button>
-            <a class="edu-save-btn" href="${escapeHtml(img)}" download="${escapeHtml(title)}-${idx + 1}" target="_blank" rel="noopener noreferrer">저장하기</a>
-          </div>
+          <img
+            class="edu-gallery-img"
+            src="${escapeHtml(img)}"
+            alt="${escapeHtml(title)} ${idx + 1}"
+            loading="lazy"
+            onclick="openImageLightboxByIndex(${idx})"
+          >
         </div>
       `).join("");
     }
@@ -1881,6 +1890,10 @@
 
       document.getElementById("modalGallery").innerHTML = buildGalleryHtml(item.images || [], item.title);
 
+      currentLightboxImages = item.images || [];
+      currentLightboxTitle = item.title || "상품자료";
+      currentLightboxIndex = 0;
+
       document.getElementById("eduModal").classList.add("show");
       document.body.style.overflow = "hidden";
     }
@@ -1892,20 +1905,42 @@
       }
     }
 
-    function openImageLightbox(src, title) {
+    function updateLightboxView() {
       const lightbox = document.getElementById("eduLightbox");
       const img = document.getElementById("eduLightboxImg");
-      const viewLink = document.getElementById("eduLightboxView");
-      const saveLink = document.getElementById("eduLightboxSave");
+      const counter = document.getElementById("eduLightboxCounter");
+      const prevBtn = document.getElementById("eduPrevBtn");
+      const nextBtn = document.getElementById("eduNextBtn");
 
-      img.src = src;
-      img.alt = title || "확대 이미지";
-      viewLink.href = src;
-      saveLink.href = src;
-      saveLink.setAttribute("download", (title || "product-image") + ".jpg");
+      if (!currentLightboxImages.length) return;
+
+      img.src = currentLightboxImages[currentLightboxIndex];
+      img.alt = `${currentLightboxTitle} ${currentLightboxIndex + 1}`;
+      counter.textContent = `${currentLightboxIndex + 1} / ${currentLightboxImages.length}`;
+
+      prevBtn.disabled = currentLightboxImages.length <= 1;
+      nextBtn.disabled = currentLightboxImages.length <= 1;
 
       lightbox.classList.add("show");
       document.body.style.overflow = "hidden";
+    }
+
+    function openImageLightboxByIndex(index) {
+      if (!currentLightboxImages.length) return;
+      currentLightboxIndex = index;
+      updateLightboxView();
+    }
+
+    function showPrevImage() {
+      if (!currentLightboxImages.length) return;
+      currentLightboxIndex = (currentLightboxIndex - 1 + currentLightboxImages.length) % currentLightboxImages.length;
+      updateLightboxView();
+    }
+
+    function showNextImage() {
+      if (!currentLightboxImages.length) return;
+      currentLightboxIndex = (currentLightboxIndex + 1) % currentLightboxImages.length;
+      updateLightboxView();
     }
 
     function closeImageLightbox() {
@@ -2212,6 +2247,8 @@
 
     document.getElementById("eduLightboxBackdrop").addEventListener("click", closeImageLightbox);
     document.getElementById("eduLightboxClose").addEventListener("click", closeImageLightbox);
+    document.getElementById("eduPrevBtn").addEventListener("click", showPrevImage);
+    document.getElementById("eduNextBtn").addEventListener("click", showNextImage);
 
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
@@ -2220,6 +2257,11 @@
         } else {
           closeEduModal();
         }
+      }
+
+      if (document.getElementById("eduLightbox").classList.contains("show")) {
+        if (e.key === "ArrowLeft") showPrevImage();
+        if (e.key === "ArrowRight") showNextImage();
       }
     });
 
