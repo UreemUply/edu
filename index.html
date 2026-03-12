@@ -578,7 +578,7 @@
       position: fixed;
       top: 50%;
       left: 50%;
-      width: min(920px, calc(100% - 32px));
+      width: min(980px, calc(100% - 32px));
       max-height: 88vh;
       overflow-y: auto;
       transform: translate(-50%, -50%);
@@ -631,25 +631,66 @@
       color: #555;
     }
 
-    .edu-modal-image-wrap {
+    .edu-gallery {
       margin-top: 18px;
-      border-radius: 18px;
-      overflow: hidden;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 12px;
-      min-height: 220px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
     }
 
-    .edu-modal-image {
-      width: 100%;
-      height: 320px;
-      display: block;
-      object-fit: contain;
+    .edu-gallery-item {
+      border: 1px solid #e2e8f0;
       background: #f8fafc;
+      border-radius: 18px;
+      overflow: hidden;
+      padding: 10px;
+    }
+
+    .edu-gallery-img-btn {
+      width: 100%;
+      border: none;
+      background: #f8fafc;
+      padding: 0;
+      cursor: pointer;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .edu-gallery-img {
+      width: 100%;
+      height: 220px;
+      object-fit: contain;
+      display: block;
+      background: #f8fafc;
+    }
+
+    .edu-gallery-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .edu-action-btn,
+    .edu-save-btn {
+      flex: 1;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.88rem;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+    }
+
+    .edu-action-btn {
+      background: #f1f5f9;
+      color: #334155;
+    }
+
+    .edu-save-btn {
+      background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+      color: white;
     }
 
     .edu-modal-body {
@@ -691,6 +732,82 @@
       padding: 16px;
       line-height: 1.8;
       color: #333;
+    }
+
+    .edu-lightbox {
+      display: none;
+    }
+
+    .edu-lightbox.show {
+      display: block;
+    }
+
+    .edu-lightbox-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.82);
+      z-index: 1200;
+    }
+
+    .edu-lightbox-content {
+      position: fixed;
+      inset: 24px;
+      z-index: 1201;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+    }
+
+    .edu-lightbox-close {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 46px;
+      height: 46px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.9);
+      font-size: 28px;
+      cursor: pointer;
+    }
+
+    .edu-lightbox-img {
+      max-width: 100%;
+      max-height: calc(100vh - 120px);
+      object-fit: contain;
+      border-radius: 16px;
+      background: #fff;
+      padding: 8px;
+    }
+
+    .edu-lightbox-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .edu-lightbox-link {
+      border: none;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 0.92rem;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+    }
+
+    .edu-lightbox-link.view {
+      background: #fff;
+      color: #111827;
+    }
+
+    .edu-lightbox-link.save {
+      background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+      color: #fff;
     }
 
     .role-select {
@@ -968,6 +1085,14 @@
       .edu-modal-top h3 {
         font-size: 24px;
       }
+
+      .edu-gallery {
+        grid-template-columns: 1fr;
+      }
+
+      .edu-lightbox-content {
+        inset: 12px;
+      }
     }
 
     .category-grid {
@@ -1149,9 +1274,7 @@
         <span class="edu-modal-badge" id="modalCategory">카테고리</span>
         <h3 id="modalTitle">제목</h3>
         <p id="modalDesc">설명</p>
-        <div class="edu-modal-image-wrap" id="modalImageWrap" style="display:none;">
-          <img id="modalImage" class="edu-modal-image" src="" alt="상품자료 이미지" />
-        </div>
+        <div id="modalGallery" class="edu-gallery"></div>
       </div>
       <div class="edu-modal-body">
         <div class="edu-modal-box">
@@ -1162,6 +1285,18 @@
           <h4>추천 멘트</h4>
           <div class="edu-script" id="modalScript"></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="edu-lightbox" id="eduLightbox">
+    <div class="edu-lightbox-backdrop" id="eduLightboxBackdrop"></div>
+    <div class="edu-lightbox-content">
+      <button class="edu-lightbox-close" id="eduLightboxClose">×</button>
+      <img id="eduLightboxImg" class="edu-lightbox-img" src="" alt="확대 이미지">
+      <div class="edu-lightbox-actions">
+        <a id="eduLightboxView" class="edu-lightbox-link view" href="#" target="_blank" rel="noopener noreferrer">새 창에서 보기</a>
+        <a id="eduLightboxSave" class="edu-lightbox-link save" href="#" download="product-image">저장하기</a>
       </div>
     </div>
   </div>
@@ -1205,7 +1340,7 @@
         category: "응대",
         title: "고객이 매장에 들어왔는데 말이 없을 때",
         desc: "첫 인사와 착석 유도, 자연스러운 대화 시작 흐름",
-        image: "",
+        images: [],
         icon: "💬",
         meta: "고객응대 · 기초",
         points: [
@@ -1392,13 +1527,41 @@
       return points;
     }
 
+    function collectEduImages(row) {
+      const rawImages = [
+        row.image,
+        row.이미지,
+        row.image1,
+        row.image2,
+        row.image3,
+        row.image4,
+        row.image5,
+        row.image6,
+        row.이미지1,
+        row.이미지2,
+        row.이미지3,
+        row.이미지4,
+        row.이미지5,
+        row.이미지6
+      ];
+
+      const converted = rawImages
+        .map(v => convertImageUrl(v))
+        .filter(v => normalizeText(v));
+
+      return [...new Set(converted)];
+    }
+
     function normalizeEduRow(row, index) {
+      const images = collectEduImages(row);
+
       return {
         id: safeText(row.id || row.ID, String(index + 1)),
         category: safeText(row.category || row.카테고리, "기타"),
         title: safeText(row.title || row.제목, "제목 없음"),
         desc: safeText(row.desc || row.description || row.설명, "설명이 없습니다."),
-        image: convertImageUrl(row.image || row.이미지 || ""),
+        images,
+        image: images[0] || "",
         icon: safeText(row.icon || row.아이콘, "📘"),
         meta: safeText(row.meta || row.메타 || row.분류, ""),
         points: splitEduPoints(row),
@@ -1686,6 +1849,22 @@
       renderEduCards();
     }
 
+    function buildGalleryHtml(images, title) {
+      if (!images.length) return "";
+
+      return images.map((img, idx) => `
+        <div class="edu-gallery-item">
+          <button class="edu-gallery-img-btn" type="button" onclick="openImageLightbox('${escapeHtml(img)}', '${escapeHtml(title)}')">
+            <img class="edu-gallery-img" src="${escapeHtml(img)}" alt="${escapeHtml(title)} ${idx + 1}" loading="lazy">
+          </button>
+          <div class="edu-gallery-actions">
+            <button class="edu-action-btn" type="button" onclick="openImageLightbox('${escapeHtml(img)}', '${escapeHtml(title)}')">크게 보기</button>
+            <a class="edu-save-btn" href="${escapeHtml(img)}" download="${escapeHtml(title)}-${idx + 1}" target="_blank" rel="noopener noreferrer">저장하기</a>
+          </div>
+        </div>
+      `).join("");
+    }
+
     function openEduModalById(id) {
       const item = eduData.find(v => String(v.id) === String(id));
       if (!item) return;
@@ -1700,18 +1879,7 @@
         ? item.points.map(point => `<li>${escapeHtml(point)}</li>`).join("")
         : `<li>핵심 포인트가 없습니다.</li>`;
 
-      const modalImageWrap = document.getElementById("modalImageWrap");
-      const modalImage = document.getElementById("modalImage");
-
-      if (item.image) {
-        modalImage.src = item.image;
-        modalImage.alt = item.title;
-        modalImageWrap.style.display = "flex";
-      } else {
-        modalImage.src = "";
-        modalImage.alt = "";
-        modalImageWrap.style.display = "none";
-      }
+      document.getElementById("modalGallery").innerHTML = buildGalleryHtml(item.images || [], item.title);
 
       document.getElementById("eduModal").classList.add("show");
       document.body.style.overflow = "hidden";
@@ -1719,7 +1887,37 @@
 
     function closeEduModal() {
       document.getElementById("eduModal").classList.remove("show");
-      document.body.style.overflow = "";
+      if (!document.getElementById("eduLightbox").classList.contains("show")) {
+        document.body.style.overflow = "";
+      }
+    }
+
+    function openImageLightbox(src, title) {
+      const lightbox = document.getElementById("eduLightbox");
+      const img = document.getElementById("eduLightboxImg");
+      const viewLink = document.getElementById("eduLightboxView");
+      const saveLink = document.getElementById("eduLightboxSave");
+
+      img.src = src;
+      img.alt = title || "확대 이미지";
+      viewLink.href = src;
+      saveLink.href = src;
+      saveLink.setAttribute("download", (title || "product-image") + ".jpg");
+
+      lightbox.classList.add("show");
+      document.body.style.overflow = "hidden";
+    }
+
+    function closeImageLightbox() {
+      const lightbox = document.getElementById("eduLightbox");
+      const img = document.getElementById("eduLightboxImg");
+
+      lightbox.classList.remove("show");
+      img.src = "";
+
+      if (!document.getElementById("eduModal").classList.contains("show")) {
+        document.body.style.overflow = "";
+      }
     }
 
     function renderTest(data) {
@@ -2012,8 +2210,17 @@
     document.getElementById("eduModalBackdrop").addEventListener("click", closeEduModal);
     document.getElementById("eduModalClose").addEventListener("click", closeEduModal);
 
+    document.getElementById("eduLightboxBackdrop").addEventListener("click", closeImageLightbox);
+    document.getElementById("eduLightboxClose").addEventListener("click", closeImageLightbox);
+
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeEduModal();
+      if (e.key === "Escape") {
+        if (document.getElementById("eduLightbox").classList.contains("show")) {
+          closeImageLightbox();
+        } else {
+          closeEduModal();
+        }
+      }
     });
 
     document.addEventListener("DOMContentLoaded", initGoogleSheetContent);
