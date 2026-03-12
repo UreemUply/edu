@@ -404,11 +404,6 @@
       white-space: pre-line;
     }
 
-    .edu-grid {
-      display: grid;
-      gap: 16px;
-    }
-
     .edu-list {
       margin: 0;
       padding-left: 18px;
@@ -419,6 +414,249 @@
     .edu-list li {
       margin-bottom: 9px;
       line-height: 1.6;
+    }
+
+    /* 교육자료 신규 스타일 */
+    .edu-section-wrap {
+      padding: 8px 0 0;
+    }
+
+    .edu-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+
+    .edu-tab {
+      border: 1px solid #ead8e1;
+      background: #fff;
+      color: #555;
+      padding: 11px 18px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .edu-tab:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px rgba(216, 0, 108, 0.08);
+    }
+
+    .edu-tab.active {
+      background: linear-gradient(135deg, #d8006c, #ff5ba0);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .edu-grid-new {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+    }
+
+    .edu-card-new {
+      position: relative;
+      overflow: hidden;
+      border-radius: 24px;
+      min-height: 340px;
+      padding: 22px;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 18px 34px rgba(0, 0, 0, 0.12);
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .edu-card-new:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 22px 40px rgba(0, 0, 0, 0.18);
+    }
+
+    .edu-card-new::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.12)),
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.28), transparent 35%);
+    }
+
+    .edu-card-new > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .edu-card-top-new {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 12px;
+    }
+
+    .edu-badge-new {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.18);
+      backdrop-filter: blur(8px);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .edu-icon-new {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .edu-card-bottom-new h3 {
+      font-size: 24px;
+      font-weight: 800;
+      margin: 0 0 10px;
+      line-height: 1.35;
+    }
+
+    .edu-card-bottom-new p {
+      font-size: 14px;
+      line-height: 1.65;
+      opacity: 0.95;
+      margin: 0 0 14px;
+    }
+
+    .edu-meta-new {
+      font-size: 13px;
+      opacity: 0.92;
+      font-weight: 600;
+    }
+
+    .edu-bg-1 { background: linear-gradient(135deg, #d8006c, #ff7ca8); }
+    .edu-bg-2 { background: linear-gradient(135deg, #6a5cff, #8f7dff); }
+    .edu-bg-3 { background: linear-gradient(135deg, #00a389, #37c8a7); }
+    .edu-bg-4 { background: linear-gradient(135deg, #ff8a00, #ffb347); }
+    .edu-bg-5 { background: linear-gradient(135deg, #1f6feb, #58a6ff); }
+    .edu-bg-6 { background: linear-gradient(135deg, #7b2cbf, #c77dff); }
+
+    .edu-modal {
+      display: none;
+    }
+
+    .edu-modal.show {
+      display: block;
+    }
+
+    .edu-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.58);
+      z-index: 999;
+    }
+
+    .edu-modal-content {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: min(920px, calc(100% - 32px));
+      max-height: 88vh;
+      overflow-y: auto;
+      transform: translate(-50%, -50%);
+      background: #fff;
+      border-radius: 28px;
+      z-index: 1000;
+      padding: 28px;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.24);
+    }
+
+    .edu-modal-close {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+      width: 42px;
+      height: 42px;
+      border: none;
+      border-radius: 50%;
+      background: #f7f2f5;
+      font-size: 26px;
+      cursor: pointer;
+    }
+
+    .edu-modal-top {
+      padding: 6px 0 24px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .edu-modal-badge {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #ffe7f1;
+      color: #d8006c;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .edu-modal-top h3 {
+      font-size: 30px;
+      margin: 0 0 10px;
+      color: #222;
+    }
+
+    .edu-modal-top p {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.7;
+      color: #555;
+    }
+
+    .edu-modal-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 22px;
+    }
+
+    .edu-modal-box {
+      background: #faf7f9;
+      border: 1px solid #f0e4eb;
+      border-radius: 20px;
+      padding: 20px;
+    }
+
+    .edu-modal-box h4 {
+      margin: 0 0 14px;
+      font-size: 18px;
+      color: #222;
+    }
+
+    .edu-modal-box ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .edu-modal-box li {
+      margin-bottom: 10px;
+      color: #444;
+      line-height: 1.6;
+    }
+
+    .edu-script {
+      white-space: pre-line;
+      background: #fff;
+      border-left: 4px solid #d8006c;
+      border-radius: 14px;
+      padding: 16px;
+      line-height: 1.8;
+      color: #333;
     }
 
     .role-select {
@@ -676,6 +914,22 @@
         padding: 10px 8px;
         font-size: 0.84rem;
       }
+
+      .edu-card-new {
+        min-height: 280px;
+      }
+
+      .edu-card-bottom-new h3 {
+        font-size: 20px;
+      }
+
+      .edu-modal-body {
+        grid-template-columns: 1fr;
+      }
+
+      .edu-modal-top h3 {
+        font-size: 24px;
+      }
     }
 
     .category-grid {
@@ -772,12 +1026,20 @@
         <div class="section-header">
           <div class="section-title-wrap">
             <h3>📚 교육자료</h3>
-            <p>교육 항목별 핵심 내용을 정리해 확인할 수 있습니다.</p>
+            <p>구글시트에서 수정한 교육자료가 카테고리별 카드 형태로 반영됩니다.</p>
           </div>
           <div class="data-badge" id="edu-count-badge">로딩 중...</div>
         </div>
 
-        <div id="edu-content-area" class="edu-grid"></div>
+        <div class="edu-section-wrap">
+          <div class="edu-toolbar" id="eduTabs"></div>
+          <div id="edu-content-area" class="edu-grid-new">
+            <div class="loading-state">
+              <strong>교육자료를 불러오는 중입니다.</strong>
+              <div>구글시트 데이터를 확인하고 있어요.</div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -841,8 +1103,31 @@
     </section>
   </div>
 
+  <div class="edu-modal" id="eduModal">
+    <div class="edu-modal-backdrop" id="eduModalBackdrop"></div>
+    <div class="edu-modal-content">
+      <button class="edu-modal-close" id="eduModalClose">×</button>
+      <div class="edu-modal-top">
+        <span class="edu-modal-badge" id="modalCategory">카테고리</span>
+        <h3 id="modalTitle">제목</h3>
+        <p id="modalDesc">설명</p>
+      </div>
+      <div class="edu-modal-body">
+        <div class="edu-modal-box">
+          <h4>교육 포인트</h4>
+          <ul id="modalPoints"></ul>
+        </div>
+        <div class="edu-modal-box">
+          <h4>추천 멘트</h4>
+          <div class="edu-script" id="modalScript"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROVBZlJbe3DKK0q9NT8aYjcob7lhscT_O88TrdqhfUMWx1vIWX0vSiEH4M0Iq1iebOCe6Z_W20_cWM/pub?gid=1576805448&single=true&output=csv";
+    const EDU_SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1irp_D1Sd8b1CJees0iO6iIzw_92BX3v70mW4e2MCQzw/edit?gid=1752227120#gid=1752227120";
 
     const COLOR_MAP = {
       핑크: "#E30678",
@@ -871,6 +1156,25 @@
     let eduData = [];
     let testData = [];
     let dynamicTestAnswerKey = {};
+    let currentEduCategory = "all";
+
+    const FALLBACK_EDU_DATA = [
+      {
+        id: "1",
+        category: "응대",
+        title: "고객이 매장에 들어왔는데 말이 없을 때",
+        desc: "첫 인사와 착석 유도, 자연스러운 대화 시작 흐름",
+        icon: "💬",
+        meta: "고객응대 · 기초",
+        points: [
+          "3초 안에 먼저 인사하기",
+          "부담 없는 첫 질문으로 대화 시작하기",
+          "자연스럽게 자리 안내하기",
+          "필름/요금점검으로 연결하기"
+        ],
+        script: "안녕하세요 고객님 😊\n혹시 휴대폰 보시러 오셨어요?\n편하게 앉으셔도 됩니다."
+      }
+    ];
 
     function normalizeText(value) {
       return (value ?? "")
@@ -963,6 +1267,112 @@
       return parseCSV(csvText);
     }
 
+    function safeText(value, fallback = "") {
+      return (value ?? "").toString().trim() || fallback;
+    }
+
+    function parseSpreadsheetInfo(url) {
+      const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      const gidMatch = url.match(/[?&#]gid=([0-9]+)/);
+      return {
+        sheetId: idMatch ? idMatch[1] : "",
+        gid: gidMatch ? gidMatch[1] : "0"
+      };
+    }
+
+    function parseGvizResponse(text) {
+      const jsonText = text
+        .replace(/^[\s\S]*setResponse\(/, "")
+        .replace(/\);\s*$/, "");
+      return JSON.parse(jsonText);
+    }
+
+    function getCellValue(cell) {
+      if (!cell) return "";
+      if (cell.f && typeof cell.f === "string") return cell.f;
+      if (cell.v === null || cell.v === undefined) return "";
+      return String(cell.v);
+    }
+
+    function splitEduPoints(row) {
+      const points = [];
+
+      for (let i = 1; i <= 6; i++) {
+        const value =
+          safeText(row[`point${i}`]) ||
+          safeText(row[`포인트${i}`]);
+
+        if (value) points.push(value);
+      }
+
+      const merged =
+        safeText(row.points) ||
+        safeText(row.포인트) ||
+        safeText(row["교육포인트"]) ||
+        safeText(row["교육 포인트"]);
+
+      if (!points.length && merged) {
+        return merged
+          .split(/\n|\/|,/)
+          .map(v => v.trim())
+          .filter(Boolean);
+      }
+
+      return points;
+    }
+
+    function normalizeEduRow(row, index) {
+      return {
+        id: safeText(row.id || row.ID, String(index + 1)),
+        category: safeText(row.category || row.카테고리, "기타"),
+        title: safeText(row.title || row.제목, "제목 없음"),
+        desc: safeText(row.desc || row.description || row.설명, "설명이 없습니다."),
+        icon: safeText(row.icon || row.아이콘, "📘"),
+        meta: safeText(row.meta || row.메타 || row.분류, ""),
+        points: splitEduPoints(row),
+        script: safeText(
+          row.script ||
+          row.멘트 ||
+          row["추천멘트"] ||
+          row["추천 멘트"],
+          "추천 멘트가 없습니다."
+        )
+      };
+    }
+
+    async function fetchEduSheetData() {
+      const { sheetId, gid } = parseSpreadsheetInfo(EDU_SPREADSHEET_URL);
+      if (!sheetId) throw new Error("교육자료 구글시트 ID를 찾을 수 없습니다.");
+
+      const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?gid=${gid}&tqx=out:json&t=${Date.now()}`;
+      const response = await fetch(gvizUrl);
+
+      if (!response.ok) {
+        throw new Error("교육자료 구글시트 데이터를 불러오지 못했습니다.");
+      }
+
+      const text = await response.text();
+      const json = parseGvizResponse(text);
+      const table = json.table;
+
+      if (!table || !table.cols || !table.rows) {
+        throw new Error("교육자료 시트 형식이 올바르지 않습니다.");
+      }
+
+      const headers = table.cols.map((col, index) => {
+        const label = safeText(col.label);
+        return label || `col${index}`;
+      });
+
+      return table.rows.map((row) => {
+        const obj = {};
+        headers.forEach((header, index) => {
+          obj[header] = getCellValue(row.c[index]);
+        });
+        return obj;
+      });
+    }
+
     function openSection(sectionId) {
       document.getElementById("home").classList.remove("active");
       document.getElementById("top-bar").classList.add("visible");
@@ -1006,6 +1416,7 @@
           <div>구글시트 CSV 데이터를 읽고 있어요.</div>
         </div>
       `;
+      document.getElementById("eduTabs").innerHTML = "";
       document.getElementById("edu-content-area").innerHTML = `
         <div class="loading-state">
           <strong>교육자료를 불러오는 중입니다.</strong>
@@ -1028,6 +1439,7 @@
           <div class="muted" style="margin-top:8px;">CSV URL과 구글시트 웹 게시 상태를 확인해 주세요.</div>
         </div>
       `;
+      document.getElementById("eduTabs").innerHTML = "";
       document.getElementById("edu-content-area").innerHTML = `
         <div class="error-state">
           <strong>교육자료 로드 실패</strong>
@@ -1144,61 +1556,78 @@
       });
     }
 
-    function renderEdu(data) {
+    function getEduBgClass(index) {
+      const classes = ["edu-bg-1", "edu-bg-2", "edu-bg-3", "edu-bg-4", "edu-bg-5", "edu-bg-6"];
+      return classes[index % classes.length];
+    }
+
+    function renderEduTabs() {
+      const eduTabs = document.getElementById("eduTabs");
+      const categories = ["all", ...new Set(eduData.map(item => item.category))];
+
+      eduTabs.innerHTML = categories.map(category => {
+        const label = category === "all" ? "전체" : category;
+        const activeClass = category === currentEduCategory ? "active" : "";
+        return `<button class="edu-tab ${activeClass}" data-category="${escapeHtml(category)}">${escapeHtml(label)}</button>`;
+      }).join("");
+    }
+
+    function renderEduCards() {
       const eduArea = document.getElementById("edu-content-area");
       const countBadge = document.getElementById("edu-count-badge");
-      eduArea.innerHTML = "";
 
-      if (!data.length) {
-        countBadge.textContent = "0개 항목";
+      const filtered = currentEduCategory === "all"
+        ? eduData
+        : eduData.filter(item => item.category === currentEduCategory);
+
+      countBadge.textContent = `총 ${filtered.length}개`;
+
+      if (!filtered.length) {
         eduArea.innerHTML = `<div class="empty-state">등록된 교육자료가 없습니다.</div>`;
         return;
       }
 
-      const sections = {};
-
-      data.forEach(row => {
-        const category = normalizeText(row.category) || "교육자료";
-        if (!sections[category]) {
-          sections[category] = {
-            category,
-            title: normalizeText(row.title) || category,
-            icon: normalizeText(row.icon) || "📚",
-            color: getColorValue(row.color),
-            items: []
-          };
-        }
-        sections[category].items.push(row);
-      });
-
-      const sectionKeys = Object.keys(sections);
-      countBadge.textContent = `${sectionKeys.length}개 카테고리`;
-
-      sectionKeys.forEach(key => {
-        const section = sections[key];
-        const sortedItems = section.items.sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
-
-        const card = document.createElement("div");
-        card.className = "card";
-        card.style.setProperty("--card-color", section.color);
-        card.style.setProperty("--card-soft", hexToRgba(section.color, 0.10));
-        card.style.setProperty("--card-strong", section.color);
-
-        card.innerHTML = `
-          <div class="card-color-line"></div>
-          <div class="situation-tag" style="margin-top:10px;">
-            ${escapeHtml(section.icon)} ${escapeHtml(section.title)}
+      eduArea.innerHTML = filtered.map((item, index) => `
+        <div class="edu-card-new ${getEduBgClass(index)}" data-id="${escapeHtml(item.id)}">
+          <div class="edu-card-top-new">
+            <span class="edu-badge-new">${escapeHtml(item.category)}</span>
+            <div class="edu-icon-new">${escapeHtml(item.icon)}</div>
           </div>
-          <div class="content-box">
-            <div class="box-title">📌 교육 핵심 내용</div>
-            <ul class="edu-list">
-              ${sortedItems.map(item => `<li>${escapeHtml(item.content || "-")}</li>`).join("")}
-            </ul>
+          <div class="edu-card-bottom-new">
+            <h3>${escapeHtml(item.title)}</h3>
+            <p>${escapeHtml(item.desc)}</p>
+            <div class="edu-meta-new">${escapeHtml(item.meta || "교육자료")}</div>
           </div>
-        `;
+        </div>
+      `).join("");
+    }
 
-        eduArea.appendChild(card);
-      });
+    function renderEdu() {
+      renderEduTabs();
+      renderEduCards();
+    }
+
+    function openEduModalById(id) {
+      const item = eduData.find(v => String(v.id) === String(id));
+      if (!item) return;
+
+      document.getElementById("modalCategory").textContent = item.category;
+      document.getElementById("modalTitle").textContent = item.title;
+      document.getElementById("modalDesc").textContent = item.desc;
+      document.getElementById("modalScript").textContent = item.script;
+
+      const modalPoints = document.getElementById("modalPoints");
+      modalPoints.innerHTML = item.points.length
+        ? item.points.map(point => `<li>${escapeHtml(point)}</li>`).join("")
+        : `<li>교육 포인트가 없습니다.</li>`;
+
+      document.getElementById("eduModal").classList.add("show");
+      document.body.style.overflow = "hidden";
+    }
+
+    function closeEduModal() {
+      document.getElementById("eduModal").classList.remove("show");
+      document.body.style.overflow = "";
     }
 
     function renderTest(data) {
@@ -1456,22 +1885,46 @@
         sheetData = await fetchSheetData();
 
         sopData = sheetData.filter(row => normalizeText(row["menu"]).replace(/\s+/g, "").toUpperCase() === "SOP");
-        eduData = sheetData.filter(row => normalizeText(row["menu"]).replace(/\s+/g, "").toUpperCase() === "EDU");
         testData = sheetData.filter(row => normalizeText(row["menu"]).replace(/\s+/g, "").toUpperCase() === "TEST");
 
-        console.log("sheetData", sheetData);
-        console.log("sopData", sopData);
-        console.log("eduData", eduData);
-        console.log("testData", testData);
+        try {
+          const eduRows = await fetchEduSheetData();
+          eduData = eduRows.map((row, index) => normalizeEduRow(row, index));
+          if (!eduData.length) eduData = FALLBACK_EDU_DATA;
+        } catch (eduError) {
+          console.error("교육자료 시트 로드 실패:", eduError);
+          eduData = FALLBACK_EDU_DATA;
+        }
 
         renderSOP(sopData);
-        renderEdu(eduData);
+        renderEdu();
         renderTest(testData);
       } catch (error) {
         console.error(error);
         setErrorState(error.message || "알 수 없는 오류가 발생했습니다.");
       }
     }
+
+    document.getElementById("eduTabs").addEventListener("click", (e) => {
+      const tab = e.target.closest(".edu-tab");
+      if (!tab) return;
+
+      currentEduCategory = tab.dataset.category;
+      renderEdu();
+    });
+
+    document.getElementById("edu-content-area").addEventListener("click", (e) => {
+      const card = e.target.closest(".edu-card-new");
+      if (!card) return;
+      openEduModalById(card.dataset.id);
+    });
+
+    document.getElementById("eduModalBackdrop").addEventListener("click", closeEduModal);
+    document.getElementById("eduModalClose").addEventListener("click", closeEduModal);
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeEduModal();
+    });
 
     document.addEventListener("DOMContentLoaded", initGoogleSheetContent);
   </script>
