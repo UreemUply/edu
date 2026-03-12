@@ -404,19 +404,6 @@
       white-space: pre-line;
     }
 
-    .edu-list {
-      margin: 0;
-      padding-left: 18px;
-      color: #334155;
-      font-size: 0.96rem;
-    }
-
-    .edu-list li {
-      margin-bottom: 9px;
-      line-height: 1.6;
-    }
-
-    /* 교육자료 신규 스타일 */
     .edu-section-wrap {
       padding: 8px 0 0;
     }
@@ -462,14 +449,17 @@
       overflow: hidden;
       border-radius: 24px;
       min-height: 340px;
-      padding: 22px;
       color: #fff;
       cursor: pointer;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
+      justify-content: flex-end;
       box-shadow: 0 18px 34px rgba(0, 0, 0, 0.12);
       transition: transform 0.25s ease, box-shadow 0.25s ease;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      padding: 22px;
     }
 
     .edu-card-new:hover {
@@ -482,8 +472,8 @@
       position: absolute;
       inset: 0;
       background:
-        linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.12)),
-        radial-gradient(circle at top right, rgba(255, 255, 255, 0.28), transparent 35%);
+        linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.22)),
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.18), transparent 35%);
     }
 
     .edu-card-new > * {
@@ -496,6 +486,7 @@
       justify-content: space-between;
       align-items: start;
       gap: 12px;
+      margin-bottom: auto;
     }
 
     .edu-badge-new {
@@ -616,6 +607,22 @@
       font-size: 15px;
       line-height: 1.7;
       color: #555;
+    }
+
+    .edu-modal-image-wrap {
+      margin-top: 18px;
+      border-radius: 18px;
+      overflow: hidden;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+    }
+
+    .edu-modal-image {
+      width: 100%;
+      display: block;
+      object-fit: cover;
+      max-height: 320px;
+      background: #f8fafc;
     }
 
     .edu-modal-body {
@@ -987,7 +994,7 @@
 
             <button class="home-menu-btn" onclick="openSection('edu')">
               <span class="home-menu-icon">📚</span>
-              <span class="home-menu-title">교육자료</span>
+              <span class="home-menu-title">상품자료</span>
             </button>
 
             <button class="home-menu-btn" onclick="openSection('test')">
@@ -1002,7 +1009,7 @@
     <div id="top-bar" class="top-bar">
       <button class="tab-btn" onclick="goHome()">🏠 홈</button>
       <button class="tab-btn" id="tab-sop" onclick="switchTab('sop', event)">📖 SOP 매뉴얼</button>
-      <button class="tab-btn" id="tab-edu" onclick="switchTab('edu', event)">📚 교육자료</button>
+      <button class="tab-btn" id="tab-edu" onclick="switchTab('edu', event)">📚 상품자료</button>
       <button class="tab-btn" id="tab-test" onclick="switchTab('test', event)">📝 테스트</button>
     </div>
 
@@ -1025,8 +1032,8 @@
       <div class="section-shell">
         <div class="section-header">
           <div class="section-title-wrap">
-            <h3>📚 교육자료</h3>
-            <p>구글시트에서 수정한 교육자료가 카테고리별 카드 형태로 반영됩니다.</p>
+            <h3>📚 상품자료</h3>
+            <p>구글시트에서 수정한 상품자료가 카테고리별 카드 형태로 반영됩니다.</p>
           </div>
           <div class="data-badge" id="edu-count-badge">로딩 중...</div>
         </div>
@@ -1035,7 +1042,7 @@
           <div class="edu-toolbar" id="eduTabs"></div>
           <div id="edu-content-area" class="edu-grid-new">
             <div class="loading-state">
-              <strong>교육자료를 불러오는 중입니다.</strong>
+              <strong>상품자료를 불러오는 중입니다.</strong>
               <div>구글시트 데이터를 확인하고 있어요.</div>
             </div>
           </div>
@@ -1111,10 +1118,13 @@
         <span class="edu-modal-badge" id="modalCategory">카테고리</span>
         <h3 id="modalTitle">제목</h3>
         <p id="modalDesc">설명</p>
+        <div class="edu-modal-image-wrap" id="modalImageWrap" style="display:none;">
+          <img id="modalImage" class="edu-modal-image" src="" alt="상품자료 이미지" />
+        </div>
       </div>
       <div class="edu-modal-body">
         <div class="edu-modal-box">
-          <h4>교육 포인트</h4>
+          <h4>핵심 포인트</h4>
           <ul id="modalPoints"></ul>
         </div>
         <div class="edu-modal-box">
@@ -1164,6 +1174,7 @@
         category: "응대",
         title: "고객이 매장에 들어왔는데 말이 없을 때",
         desc: "첫 인사와 착석 유도, 자연스러운 대화 시작 흐름",
+        image: "",
         icon: "💬",
         meta: "고객응대 · 기초",
         points: [
@@ -1327,6 +1338,7 @@
         category: safeText(row.category || row.카테고리, "기타"),
         title: safeText(row.title || row.제목, "제목 없음"),
         desc: safeText(row.desc || row.description || row.설명, "설명이 없습니다."),
+        image: safeText(row.image || row.이미지, ""),
         icon: safeText(row.icon || row.아이콘, "📘"),
         meta: safeText(row.meta || row.메타 || row.분류, ""),
         points: splitEduPoints(row),
@@ -1342,13 +1354,13 @@
 
     async function fetchEduSheetData() {
       const { sheetId, gid } = parseSpreadsheetInfo(EDU_SPREADSHEET_URL);
-      if (!sheetId) throw new Error("교육자료 구글시트 ID를 찾을 수 없습니다.");
+      if (!sheetId) throw new Error("상품자료 구글시트 ID를 찾을 수 없습니다.");
 
       const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?gid=${gid}&tqx=out:json&t=${Date.now()}`;
       const response = await fetch(gvizUrl);
 
       if (!response.ok) {
-        throw new Error("교육자료 구글시트 데이터를 불러오지 못했습니다.");
+        throw new Error("상품자료 구글시트 데이터를 불러오지 못했습니다.");
       }
 
       const text = await response.text();
@@ -1356,7 +1368,7 @@
       const table = json.table;
 
       if (!table || !table.cols || !table.rows) {
-        throw new Error("교육자료 시트 형식이 올바르지 않습니다.");
+        throw new Error("상품자료 시트 형식이 올바르지 않습니다.");
       }
 
       const headers = table.cols.map((col, index) => {
@@ -1419,7 +1431,7 @@
       document.getElementById("eduTabs").innerHTML = "";
       document.getElementById("edu-content-area").innerHTML = `
         <div class="loading-state">
-          <strong>교육자료를 불러오는 중입니다.</strong>
+          <strong>상품자료를 불러오는 중입니다.</strong>
           <div>잠시만 기다려 주세요.</div>
         </div>
       `;
@@ -1442,7 +1454,7 @@
       document.getElementById("eduTabs").innerHTML = "";
       document.getElementById("edu-content-area").innerHTML = `
         <div class="error-state">
-          <strong>교육자료 로드 실패</strong>
+          <strong>상품자료 로드 실패</strong>
           <div>${escapeHtml(message)}</div>
         </div>
       `;
@@ -1561,6 +1573,13 @@
       return classes[index % classes.length];
     }
 
+    function getEduCardStyle(item, index) {
+      if (item.image) {
+        return `background-image:url('${item.image.replace(/'/g, "%27")}');`;
+      }
+      return "";
+    }
+
     function renderEduTabs() {
       const eduTabs = document.getElementById("eduTabs");
       const categories = ["all", ...new Set(eduData.map(item => item.category))];
@@ -1583,12 +1602,12 @@
       countBadge.textContent = `총 ${filtered.length}개`;
 
       if (!filtered.length) {
-        eduArea.innerHTML = `<div class="empty-state">등록된 교육자료가 없습니다.</div>`;
+        eduArea.innerHTML = `<div class="empty-state">등록된 상품자료가 없습니다.</div>`;
         return;
       }
 
       eduArea.innerHTML = filtered.map((item, index) => `
-        <div class="edu-card-new ${getEduBgClass(index)}" data-id="${escapeHtml(item.id)}">
+        <div class="edu-card-new ${item.image ? "" : getEduBgClass(index)}" data-id="${escapeHtml(item.id)}" style="${getEduCardStyle(item, index)}">
           <div class="edu-card-top-new">
             <span class="edu-badge-new">${escapeHtml(item.category)}</span>
             <div class="edu-icon-new">${escapeHtml(item.icon)}</div>
@@ -1596,7 +1615,7 @@
           <div class="edu-card-bottom-new">
             <h3>${escapeHtml(item.title)}</h3>
             <p>${escapeHtml(item.desc)}</p>
-            <div class="edu-meta-new">${escapeHtml(item.meta || "교육자료")}</div>
+            <div class="edu-meta-new">${escapeHtml(item.meta || "상품자료")}</div>
           </div>
         </div>
       `).join("");
@@ -1619,7 +1638,20 @@
       const modalPoints = document.getElementById("modalPoints");
       modalPoints.innerHTML = item.points.length
         ? item.points.map(point => `<li>${escapeHtml(point)}</li>`).join("")
-        : `<li>교육 포인트가 없습니다.</li>`;
+        : `<li>핵심 포인트가 없습니다.</li>`;
+
+      const modalImageWrap = document.getElementById("modalImageWrap");
+      const modalImage = document.getElementById("modalImage");
+
+      if (item.image) {
+        modalImage.src = item.image;
+        modalImage.alt = item.title;
+        modalImageWrap.style.display = "block";
+      } else {
+        modalImage.src = "";
+        modalImage.alt = "";
+        modalImageWrap.style.display = "none";
+      }
 
       document.getElementById("eduModal").classList.add("show");
       document.body.style.overflow = "hidden";
@@ -1717,12 +1749,10 @@
     function submitDynamicTest() {
       const name = document.getElementById("planner-name").value;
       let total = 0;
-      let max = 0;
       const answerDetails = [];
 
       for (const key in dynamicTestAnswerKey) {
         const info = dynamicTestAnswerKey[key];
-        max += info.score;
 
         const checked = document.querySelector(`input[name="${key}"]:checked`);
         if (!checked) {
@@ -1766,7 +1796,7 @@
 
       localStorage.setItem("sopTestResults_ureem", JSON.stringify(records));
 
-      alert(`${name} 플래너님, 답안이 제출되었습니다!\n점수: ${total}점 / ${max}점\n\n확인 버튼을 누르면 초기화면으로 이동합니다.`);
+      alert(`${name} 플래너님, 답안이 제출되었습니다.\n수고하셨습니다.`);
       location.reload();
     }
 
@@ -1892,7 +1922,7 @@
           eduData = eduRows.map((row, index) => normalizeEduRow(row, index));
           if (!eduData.length) eduData = FALLBACK_EDU_DATA;
         } catch (eduError) {
-          console.error("교육자료 시트 로드 실패:", eduError);
+          console.error("상품자료 시트 로드 실패:", eduError);
           eduData = FALLBACK_EDU_DATA;
         }
 
