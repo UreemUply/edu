@@ -191,8 +191,9 @@
     </style>
 </head>
 <body class="admin-mode">
+</div>
 
-<div id="page-home" class="page active container">
+    <div id="page-home" class="page active container">
         <header class="main-header">
             <div class="logo">유림텔레콤 <span>Class</span></div>
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -409,8 +410,6 @@
             <button class="btn-sm btn-outline" onclick="execCmd('justifyLeft')">좌측</button>
             <button class="btn-sm btn-outline" onclick="execCmd('justifyCenter')">중앙</button>
             <button class="btn-sm btn-outline" onclick="execCmd('justifyRight')">우측</button>
-            <input type="file" id="edu-image-input" accept="image/*" style="display:none;" onchange="uploadEduImage(event)">
-            <button class="btn-sm btn-outline" onclick="document.getElementById('edu-image-input').click()">사진</button>
         </div>
         <div id="page-notice-dynamic-area"></div>
     </div>
@@ -452,8 +451,6 @@
             <button class="btn-sm btn-outline" onclick="execCmd('justifyLeft')">좌측</button>
             <button class="btn-sm btn-outline" onclick="execCmd('justifyCenter')">중앙</button>
             <button class="btn-sm btn-outline" onclick="execCmd('justifyRight')">우측</button>
-            <input type="file" id="edu-image-input" accept="image/*" style="display:none;" onchange="uploadEduImage(event)">
-            <button class="btn-sm btn-outline" onclick="document.getElementById('edu-image-input').click()">사진</button>
         </div>
         <div id="page-policy-dynamic-area"></div>
     </div>
@@ -523,8 +520,6 @@
             <button class="btn-sm btn-outline" onclick="execCmd('justifyLeft')">좌측</button>
             <button class="btn-sm btn-outline" onclick="execCmd('justifyCenter')">중앙</button>
             <button class="btn-sm btn-outline" onclick="execCmd('justifyRight')">우측</button>
-            <input type="file" id="edu-image-input" accept="image/*" style="display:none;" onchange="uploadEduImage(event)">
-            <button class="btn-sm btn-outline" onclick="document.getElementById('edu-image-input').click()">사진</button>
         </div>
         <div id="page-content-dynamic-area"></div>
     </div>
@@ -654,8 +649,6 @@
             <button class="btn-sm btn-outline" onclick="execCmd('justifyLeft')">좌측</button>
             <button class="btn-sm btn-outline" onclick="execCmd('justifyCenter')">중앙</button>
             <button class="btn-sm btn-outline" onclick="execCmd('justifyRight')">우측</button>
-            <input type="file" id="edu-image-input" accept="image/*" style="display:none;" onchange="uploadEduImage(event)">
-            <button class="btn-sm btn-outline" onclick="document.getElementById('edu-image-input').click()">사진</button>
         </div>
         <div id="page-fullscreen-dynamic-area"></div>
     </div>
@@ -1713,8 +1706,7 @@
             }
         }
 
-        
-async function openContent(subcategoryId, title) {
+        async function openContent(subcategoryId, title) {
             currentEduSubcategoryId = subcategoryId;
             currentEduContentId = null;
 
@@ -1735,95 +1727,18 @@ async function openContent(subcategoryId, title) {
             currentEduContentId = data?.id || null;
 
             const html = `
-                <div class="slider-container" style="margin-bottom:16px;">
-                    <div class="slider-wrapper content-slider" id="edu-content-image-list">
-                        ${data?.thumbnail_url ? `<div class="slider-item"><img src="${data.thumbnail_url}" class="slider-img" style="object-fit:contain; background:#fff;"></div>` : ``}
-                    </div>
-                    <div class="admin-only admin-add-img-btn" onclick="document.getElementById('edu-image-input').click()">+ 이미지 첨부</div>
-                </div>
-                <div class="content-text-box" id="edu-content-editor" contenteditable="true">${data?.content_html || '<p>내용을 입력하세요.</p>'}</div>
-                <div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">
+                <div class="content-text-box" id="edu-content-editor" contenteditable="true">${data?.content_html || '내용을 입력하세요.'}</div>
+                <div style="margin-top:16px;">
                     <button class="btn-admin edit" onclick="saveEduContent()">저장</button>
                 </div>
             `;
 
             document.getElementById('page-content-dynamic-area').innerHTML = html;
             document.getElementById('content-title').innerText = title;
-
-            const toolbar = document.querySelector('#page-content .content-toolbar');
-            if (toolbar) toolbar.style.display = 'flex';
-
-            const editBtn = document.querySelector('#page-content .btn-edit-content');
-            if (editBtn) editBtn.style.display = 'none';
-
             goToPage('page-content', -1, title);
         }
 
-
-
-        async function uploadEduImage(event) {
-            const file = event.target.files?.[0];
-            if (!file) return;
-
-            if (!currentEduSubcategoryId) {
-                alert('먼저 소분류를 선택하세요.');
-                event.target.value = '';
-                return;
-            }
-
-            const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
-            const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-            const filePath = `subcategory-${currentEduSubcategoryId}/${fileName}`;
-
-            const { error: uploadError } = await supabaseClient
-                .storage
-                .from('edu-images')
-                .upload(filePath, file, {
-                    cacheControl: '3600',
-                    upsert: false
-                });
-
-            if (uploadError) {
-                console.error(uploadError);
-                alert('이미지 업로드 실패 (Storage 버킷 edu-images가 public으로 생성되어 있는지 확인)');
-                event.target.value = '';
-                return;
-            }
-
-            const { data: publicUrlData } = supabaseClient
-                .storage
-                .from('edu-images')
-                .getPublicUrl(filePath);
-
-            const imageUrl = publicUrlData?.publicUrl;
-            if (!imageUrl) {
-                alert('이미지 URL 생성 실패');
-                event.target.value = '';
-                return;
-            }
-
-            const editor = document.getElementById('edu-content-editor');
-            if (!editor) {
-                event.target.value = '';
-                return;
-            }
-
-            editor.focus();
-            document.execCommand('insertHTML', false, `<p><img src="${imageUrl}" alt="" style="max-width:100%; border-radius:12px;" /></p>`);
-
-            const imageList = document.getElementById('edu-content-image-list');
-            if (imageList) {
-                const item = document.createElement('div');
-                item.className = 'slider-item';
-                item.innerHTML = `<img src="${imageUrl}" class="slider-img" style="object-fit:contain; background:#fff;">`;
-                imageList.appendChild(item);
-            }
-
-            event.target.value = '';
-        }
-
-        
-async function saveEduContent() {
+        async function saveEduContent() {
             if (!currentEduSubcategoryId) {
                 alert('선택된 소분류가 없습니다.');
                 return;
@@ -1831,18 +1746,13 @@ async function saveEduContent() {
 
             const editor = document.getElementById('edu-content-editor');
             const html = editor ? editor.innerHTML : '';
-            const temp = document.createElement('div');
-            temp.innerHTML = html;
-            const firstImage = temp.querySelector('img');
-            const thumbnailUrl = firstImage ? firstImage.getAttribute('src') : null;
 
             if (currentEduContentId) {
                 const { error } = await supabaseClient
                     .from('edu_contents')
                     .update({
                         title: document.getElementById('content-title').innerText.trim(),
-                        content_html: html,
-                        thumbnail_url: thumbnailUrl
+                        content_html: html
                     })
                     .eq('id', currentEduContentId);
 
@@ -1868,7 +1778,6 @@ async function saveEduContent() {
                         subcategory_id: currentEduSubcategoryId,
                         title: document.getElementById('content-title').innerText.trim(),
                         content_html: html,
-                        thumbnail_url: thumbnailUrl,
                         sort_order: nextSort,
                         is_visible: true
                     }])
@@ -1886,7 +1795,6 @@ async function saveEduContent() {
 
             alert('저장되었습니다.');
         }
-
 
 
         function handleSliderImageUpload(event, isFullscreen) {
