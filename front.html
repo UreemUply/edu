@@ -538,15 +538,16 @@
         document.addEventListener('touchmove', function(event) {
             if(event.touches.length > 1 && !isZoomAllowed) event.preventDefault();
         }, { passive: false });
-
+   
         window.onload = function() {
-            history.replaceState({ pageId: 'page-home', navIndex: 0 }, "", "#home");
-            document.body.style.paddingBottom = '0'; 
-            syncNoticesToHome(); 
-            updateStoreDropdowns(); 
-            renderStoreAdminList(); 
-        };
+            syncNoticesToHome();
+            updateStoreDropdowns();
+            renderStoreAdminList();
 
+            showPageOnly('page-home');
+            activateBottomNav(0);
+            history.replaceState({ pageId: 'page-home', navIndex: 0 }, "", "#home");
+};
         window.addEventListener('popstate', function(event) {
             if (event.state) {
                 showPageOnly(event.state.pageId);
