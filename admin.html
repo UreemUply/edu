@@ -2566,11 +2566,170 @@ function handleSliderImageUpload(event, isFullscreen) {
     body.appendChild(addBtn);
   };
 
+  async function fetchContentRecommendations(contentId){
+    if(!contentId) return [];
+    const { data, error } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .select('*')
+      .eq('content_id', contentId)
+      .eq('is_visible', true)
+      .order('sort_order', { ascending:true })
+      .order('id', { ascending:true });
+
+    if(error){
+      console.error(error);
+      throw error;
+    }
+    return data || [];
+  }
+
+  function getRecommendationTypeLabel(linkType){
+    return linkType === 'internal' ? '내부링크' : '외부링크';
+  }
+
+  function getRecommendationPlaceholder(linkType){
+    return linkType === 'internal'
+      ? '예: content:34 / subcategory:12 / page-home'
+      : 'https://example.com';
+  }
+
+  function normalizeRecommendationLinkValue(linkType, rawValue){
+    const value = String(rawValue || '').trim();
+    if(linkType === 'external') return value;
+    if(!value) return '';
+    if(value.startsWith('#')) return value.slice(1);
+    return value;
+  }
+
+  function renderRecommendationButtons(items){
+    if(!items || !items.length) return '';
+    return `
+      <div class="recommend-area">
+        <div class="recommend-title">💡 추천 제안</div>
+        <div class="keyword-list content-keyword-list">
+          ${items.map(item => `
+            <button
+              type="button"
+              class="recommend-link-btn"
+              onclick='handleRecommendationLink(${JSON.stringify(item.link_type)}, ${JSON.stringify(item.link_value)})'
+            >${escapeHtml(item.title)}</button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderRecommendationManageList(items){
+    const wrap = document.getElementById('recommend-manage-list');
+    if(!wrap) return;
+
+    if(!items || !items.length){
+      wrap.innerHTML = '<div style="color:#888;">추천 제안이 없습니다.</div>';
+      return;
+    }
+
+    wrap.innerHTML = items.map(item => `
+      <div class="recommend-manage-item">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:700; margin-bottom:4px;">${escapeHtml(item.title)}</div>
+          <div style="font-size:12px; color:#777; margin-bottom:2px;">${getRecommendationTypeLabel(item.link_type)}</div>
+          <div style="font-size:12px; color:#999; word-break:break-all;">${escapeHtml(item.link_value)}</div>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn-admin edit" onclick="moveRecommendation(${item.id}, ${item.sort_order}, -1)">↑</button>
+          <button class="btn-admin edit" onclick="moveRecommendation(${item.id}, ${item.sort_order}, 1)">↓</button>
+          <button class="btn-admin edit" onclick="editRecommendation(${item.id})">수정</button>
+          <button class="btn-admin del" onclick="deleteRecommendation(${item.id})">삭제</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  window.handleRecommendationLink = function(linkType, linkValue){
+    const value = String(linkValue || '').trim();
+    if(!value) return;
+
+    if(linkType === 'external'){
+      window.open(value, '_blank', 'noopener');
+      return;
+    }
+
+    if(value.startsWith('content:')){
+      const contentId = Number(value.split(':')[1]);
+      if(contentId) openContentById(contentId);
+      return;
+    }
+
+    if(value.startsWith('subcategory:')){
+      const subcategoryId = Number(value.split(':')[1]);
+      if(subcategoryId) openSubCategoryById(subcategoryId);
+      return;
+    }
+
+    const pageId = value.startsWith('#') ? value.slice(1) : value;
+    const pageEl = document.getElementById(pageId);
+    if(pageEl){
+      window.goToPage(pageId);
+      return;
+    }
+
+    alert('내부링크를 찾을 수 없습니다.\n' + value);
+  };
+
+  window.openContentById = async function(contentId){
+    try{
+      const { data, error } = await window.supabaseClient
+        .from('edu_contents')
+        .select('id, subcategory_id, title')
+        .eq('id', contentId)
+        .single();
+
+      if(error || !data){
+        console.error(error);
+        alert('콘텐츠를 찾을 수 없습니다.');
+        return;
+      }
+
+      await window.openContent(data.subcategory_id, data.title || document.getElementById('content-title')?.innerText || '콘텐츠');
+    }catch(e){
+      console.error(e);
+      alert('콘텐츠 이동 실패');
+    }
+  };
+
+  window.openSubCategoryById = async function(subcategoryId){
+    try{
+      const { data, error } = await window.supabaseClient
+        .from('edu_subcategories')
+        .select('id, name')
+        .eq('id', subcategoryId)
+        .single();
+
+      if(error || !data){
+        console.error(error);
+        alert('소분류를 찾을 수 없습니다.');
+        return;
+      }
+
+      await window.openContent(data.id, data.name || '콘텐츠');
+    }catch(e){
+      console.error(e);
+      alert('소분류 이동 실패');
+    }
+  };
+
+  window.loadContentRecommendations = async function(){
+    const items = await fetchContentRecommendations(window.currentEduContentId);
+    renderRecommendationManageList(items);
+    return items;
+  };
+
   window.openContent = async function(subcategoryId, title){
     window.currentEduSubcategoryId = subcategoryId;
     try{
       const content = await window.ensureEduContentRecord(subcategoryId, title);
       window.currentEduContentId = content.id;
+      const recommendations = await fetchContentRecommendations(content.id);
 
       const btn = document.querySelector('#page-content .btn-edit-content');
       if(btn){
@@ -2580,16 +2739,7 @@ function handleSliderImageUpload(event, isFullscreen) {
       }
       dirty = false;
 
-      const recommends = parseRecommendJson(content.summary);
-      const recommendHtml = recommends.length ? `
-        <div class="recommend-area">
-          <div class="recommend-title">💡 추천 제안</div>
-          <div class="keyword-list content-keyword-list">
-            ${recommends.map(item => `<a class="recommend-link-btn" href="${item.url}" target="${getRecommendTarget(item.type)}">${item.title}</a>`).join('')}
-          </div>
-        </div>
-      ` : '';
-
+      const recommendHtml = renderRecommendationButtons(recommendations);
       const viewHtml = `
         <div id="edu-content-view">
           <div id="edu-image-slider" style="margin-bottom:16px;"></div>
@@ -2640,11 +2790,10 @@ function handleSliderImageUpload(event, isFullscreen) {
       return;
     }
 
-    const recommends = parseRecommendJson(data?.summary);
     const imageItems = (images || []).map(img => `
       <div style="display:flex; align-items:center; gap:10px; padding:10px; border:1px solid #eee; border-radius:10px; margin-bottom:8px;">
         <img src="${img.image_url}" style="width:88px; height:88px; object-fit:cover; border-radius:8px; background:#f6f6f6;">
-        <div style="flex:1;">
+        <div style="flex:1; min-width:0;">
           <div style="font-size:12px; color:#666;">순서: ${img.sort_order}</div>
           <div style="font-size:12px; color:#999; word-break:break-all;">${img.image_url}</div>
         </div>
@@ -2653,17 +2802,6 @@ function handleSliderImageUpload(event, isFullscreen) {
           <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
           <button class="btn-admin del" onclick="deleteContentImage(${img.id}, ${JSON.stringify(img.image_url)})">삭제</button>
         </div>
-      </div>
-    `).join('');
-
-    const recommendItems = recommends.map((item, idx) => `
-      <div class="recommend-manage-item">
-        <div style="flex:1;">
-          <div style="font-size:13px; font-weight:700;">${item.title}</div>
-          <div style="font-size:12px; color:#777;">${item.type === 'internal' ? '내부링크' : '외부링크'} · ${item.url}</div>
-        </div>
-        <button class="btn-admin edit" onclick="editRecommendItem(${idx})">수정</button>
-        <button class="btn-admin del" onclick="deleteRecommendItem(${idx})">삭제</button>
       </div>
     `).join('');
 
@@ -2683,9 +2821,9 @@ function handleSliderImageUpload(event, isFullscreen) {
         <div style="margin-bottom:20px;">
           <div style="font-weight:700; margin-bottom:10px;">추천 제안</div>
           <div style="display:flex; gap:8px; margin-bottom:12px;">
-            <button class="btn-admin edit" onclick="addRecommendItem()">+ 추가</button>
+            <button class="btn-admin edit" onclick="addRecommendation()">+ 추가</button>
           </div>
-          <div id="recommend-manage-list" data-items='${stringifyRecommendJson(recommends)}'>${recommendItems || '<div style="color:#888;">추천 제안이 없습니다.</div>'}</div>
+          <div id="recommend-manage-list"><div style="color:#888;">불러오는 중...</div></div>
         </div>
 
         <div style="font-weight:700; margin-bottom:10px;">본문</div>
@@ -2716,17 +2854,16 @@ function handleSliderImageUpload(event, isFullscreen) {
     document.getElementById('page-content-dynamic-area').innerHTML = editorHtml;
     bindEditorDirtyTracking();
     dirty = false;
+    await window.loadContentRecommendations();
   };
 
   window.saveContent = async function(){
     const content = document.getElementById('editor-text')?.innerHTML || '';
-    const recommendRaw = document.getElementById('recommend-manage-list')?.dataset.items || '[]';
 
     const { error } = await window.supabaseClient
       .from('edu_contents')
       .update({
         content_html: content,
-        summary: recommendRaw,
         title: document.getElementById('content-title').innerText.trim()
       })
       .eq('id', window.currentEduContentId);
@@ -2749,59 +2886,208 @@ function handleSliderImageUpload(event, isFullscreen) {
     await window.openContent(window.currentEduSubcategoryId, document.getElementById('content-title').innerText);
   };
 
-  window.getCurrentRecommendItems = function(){
-    const container = document.getElementById('recommend-manage-list');
-    if(!container) return [];
-    try{ return JSON.parse(container.dataset.items || '[]'); }catch(e){ return []; }
-  };
+  window.addRecommendation = async function(){
+    if(!window.currentEduContentId){
+      alert('콘텐츠를 먼저 선택하세요.');
+      return;
+    }
 
-  window.setCurrentRecommendItems = function(items){
-    const container = document.getElementById('recommend-manage-list');
-    if(!container) return;
-    container.dataset.items = JSON.stringify(items || []);
-    container.innerHTML = (items || []).length ? items.map((item, idx) => `
-      <div class="recommend-manage-item">
-        <div style="flex:1;">
-          <div style="font-size:13px; font-weight:700;">${item.title}</div>
-          <div style="font-size:12px; color:#777;">${item.type === 'internal' ? '내부링크' : '외부링크'} · ${item.url}</div>
-        </div>
-        <button class="btn-admin edit" onclick="editRecommendItem(${idx})">수정</button>
-        <button class="btn-admin del" onclick="deleteRecommendItem(${idx})">삭제</button>
-      </div>
-    `).join('') : '<div style="color:#888;">추천 제안이 없습니다.</div>';
+    const title = prompt('추천제안 제목을 입력하세요.');
+    if(!title || !title.trim()) return;
+
+    const linkTypeInput = prompt('링크 타입을 입력하세요.\nexternal / internal', 'external');
+    if(!linkTypeInput) return;
+
+    const linkType = linkTypeInput.trim().toLowerCase();
+    if(!['external', 'internal'].includes(linkType)){
+      alert('링크 타입은 external 또는 internal만 가능합니다.');
+      return;
+    }
+
+    const linkValueInput = prompt(`링크 값을 입력하세요.\n${getRecommendationPlaceholder(linkType)}`, linkType === 'external' ? 'https://' : '');
+    if(!linkValueInput || !linkValueInput.trim()) return;
+
+    const linkValue = normalizeRecommendationLinkValue(linkType, linkValueInput);
+    if(!linkValue){
+      alert('링크 값을 입력하세요.');
+      return;
+    }
+
+    const { data: lastRow, error: lastError } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .select('sort_order')
+      .eq('content_id', window.currentEduContentId)
+      .order('sort_order', { ascending:false })
+      .limit(1)
+      .maybeSingle();
+
+    if(lastError){
+      console.error(lastError);
+      alert('추천제안 순서 조회 실패');
+      return;
+    }
+
+    const nextSort = (lastRow?.sort_order || 0) + 1;
+    const { error } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .insert([{
+        content_id: window.currentEduContentId,
+        title: title.trim(),
+        link_type: linkType,
+        link_value: linkValue,
+        sort_order: nextSort,
+        is_visible: true
+      }]);
+
+    if(error){
+      console.error(error);
+      alert('추천제안 추가 실패');
+      return;
+    }
+
+    await window.loadContentRecommendations();
     markDirty();
   };
 
-  window.addRecommendItem = function(){
-    const title = prompt('버튼 이름을 입력하세요.');
-    if(!title) return;
-    const urlInput = prompt('링크를 입력하세요.\n- 외부링크: https://example.com\n- 내부링크: #page-home 또는 page-home');
-    if(!urlInput) return;
-    const raw = urlInput.trim();
-    const type = /^https?:\/\//i.test(raw) ? 'external' : 'internal';
-    const items = window.getCurrentRecommendItems();
-    items.push({ title:title.trim(), type, url:normalizeUrlByType(type, raw) });
-    window.setCurrentRecommendItems(items);
+  window.editRecommendation = async function(recommendationId){
+    const { data, error } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .select('*')
+      .eq('id', recommendationId)
+      .single();
+
+    if(error || !data){
+      console.error(error);
+      alert('추천제안 정보를 불러오지 못했습니다.');
+      return;
+    }
+
+    const title = prompt('추천제안 제목을 수정하세요.', data.title);
+    if(!title || !title.trim()) return;
+
+    const linkTypeInput = prompt('링크 타입을 수정하세요.\nexternal / internal', data.link_type);
+    if(!linkTypeInput) return;
+
+    const linkType = linkTypeInput.trim().toLowerCase();
+    if(!['external', 'internal'].includes(linkType)){
+      alert('링크 타입은 external 또는 internal만 가능합니다.');
+      return;
+    }
+
+    const linkValueInput = prompt(`링크 값을 수정하세요.\n${getRecommendationPlaceholder(linkType)}`, data.link_value);
+    if(!linkValueInput || !linkValueInput.trim()) return;
+
+    const linkValue = normalizeRecommendationLinkValue(linkType, linkValueInput);
+    if(!linkValue){
+      alert('링크 값을 입력하세요.');
+      return;
+    }
+
+    const { error:updateError } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .update({
+        title: title.trim(),
+        link_type: linkType,
+        link_value: linkValue
+      })
+      .eq('id', recommendationId);
+
+    if(updateError){
+      console.error(updateError);
+      alert('추천제안 수정 실패');
+      return;
+    }
+
+    await window.loadContentRecommendations();
+    markDirty();
   };
 
-  window.editRecommendItem = function(index){
-    const items = window.getCurrentRecommendItems();
-    const item = items[index];
-    if(!item) return;
-    const title = prompt('버튼 이름을 수정하세요.', item.title);
-    if(!title) return;
-    const urlInput = prompt('링크를 수정하세요.\n- 외부링크: https://example.com\n- 내부링크: #page-home 또는 page-home', item.url);
-    if(!urlInput) return;
-    const raw = urlInput.trim();
-    const type = /^https?:\/\//i.test(raw) ? 'external' : 'internal';
-    items[index] = { title:title.trim(), type, url:normalizeUrlByType(type, raw) };
-    window.setCurrentRecommendItems(items);
+  window.deleteRecommendation = async function(recommendationId){
+    if(!confirm('이 추천제안을 삭제하시겠습니까?')) return;
+
+    const { error } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .delete()
+      .eq('id', recommendationId);
+
+    if(error){
+      console.error(error);
+      alert('추천제안 삭제 실패');
+      return;
+    }
+
+    await window.normalizeRecommendationSortOrder();
+    await window.loadContentRecommendations();
+    markDirty();
   };
 
-  window.deleteRecommendItem = function(index){
-    const items = window.getCurrentRecommendItems();
-    items.splice(index, 1);
-    window.setCurrentRecommendItems(items);
+  window.moveRecommendation = async function(recommendationId, sortOrder, direction){
+    if(!window.currentEduContentId) return;
+
+    const targetSort = sortOrder + direction;
+    if(targetSort < 1) return;
+
+    const { data: neighbor, error: neighborError } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .select('*')
+      .eq('content_id', window.currentEduContentId)
+      .eq('sort_order', targetSort)
+      .maybeSingle();
+
+    if(neighborError){
+      console.error(neighborError);
+      alert('순서 변경 대상 조회 실패');
+      return;
+    }
+
+    if(!neighbor) return;
+
+    const { error:e1 } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .update({ sort_order: -9999 })
+      .eq('id', recommendationId);
+    if(e1){ console.error(e1); alert('순서 변경 실패'); return; }
+
+    const { error:e2 } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .update({ sort_order: sortOrder })
+      .eq('id', neighbor.id);
+    if(e2){ console.error(e2); alert('순서 변경 실패'); return; }
+
+    const { error:e3 } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .update({ sort_order: targetSort })
+      .eq('id', recommendationId);
+    if(e3){ console.error(e3); alert('순서 변경 실패'); return; }
+
+    await window.loadContentRecommendations();
+    markDirty();
+  };
+
+  window.normalizeRecommendationSortOrder = async function(){
+    if(!window.currentEduContentId) return;
+
+    const { data, error } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .select('id, sort_order')
+      .eq('content_id', window.currentEduContentId)
+      .order('sort_order', { ascending:true })
+      .order('id', { ascending:true });
+
+    if(error || !data){
+      console.error(error);
+      return;
+    }
+
+    for(let i=0;i<data.length;i++){
+      const nextOrder = i + 1;
+      if(data[i].sort_order !== nextOrder){
+        await window.supabaseClient
+          .from('edu_content_recommendations')
+          .update({ sort_order: nextOrder })
+          .eq('id', data[i].id);
+      }
+    }
   };
 
   async function resizeImageFile(file, maxWidth = 1600, quality = 0.9){
@@ -3131,6 +3417,439 @@ function handleSliderImageUpload(event, isFullscreen) {
     window._sliderIndex = (window._sliderIndex + 1) % data.length;
     updateSliderView(true);
   };
+})();
+</script>
+
+
+<style id="oai-admin-video-recommend-v2-style">
+.rec-modal-overlay,.video-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:12000;display:none;align-items:center;justify-content:center;padding:18px;}
+.rec-modal,.video-modal{width:100%;max-width:520px;background:#fff;border-radius:20px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.22);}
+.rec-modal-title,.video-modal-title{font-size:18px;font-weight:800;margin-bottom:14px;color:#111;}
+.rec-form-group{margin-bottom:14px;}
+.rec-form-label{display:block;font-size:13px;font-weight:700;color:#333;margin-bottom:8px;}
+.rec-form-input{width:100%;padding:13px 14px;border:1px solid #ddd;border-radius:12px;font-size:14px;outline:none;background:#fff;}
+.rec-form-input:focus{border-color:var(--uplus-magenta);}
+.rec-type-row{display:flex;gap:10px;flex-wrap:wrap;}
+.rec-type-pill{flex:1;min-width:120px;border:1px solid #ddd;border-radius:14px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px;font-weight:700;background:#fff;transition:.18s ease;}
+.rec-type-pill.active{border-color:var(--uplus-magenta);background:#fff0f7;color:var(--uplus-magenta);}
+.rec-type-pill input{display:none;}
+.rec-form-help{font-size:12px;color:#777;line-height:1.5;margin-top:6px;}
+.rec-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+.content-video-box{margin-top:20px;padding:14px;border:1px solid #f0d1e0;background:#fff8fb;border-radius:14px;}
+.content-video-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;border:1px solid #e5bfd0;border-radius:12px;padding:14px 16px;cursor:pointer;font-size:14px;font-weight:700;color:#333;}
+.content-video-trigger:hover{border-color:var(--uplus-magenta);color:var(--uplus-magenta);}
+.content-video-sub{font-size:12px;color:#666;margin-top:8px;line-height:1.5;}
+.video-preview-btn{white-space:nowrap;}
+.video-embed-wrap{position:relative;width:100%;padding-top:56.25%;background:#000;border-radius:14px;overflow:hidden;}
+.video-embed-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
+.video-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
+.video-close-btn{border:none;background:#f3f4f8;border-radius:10px;padding:8px 10px;cursor:pointer;font-weight:700;}
+</style>
+
+<div id="recommendation-modal-overlay" class="rec-modal-overlay" onclick="if(event.target===this) closeRecommendationModal()">
+  <div class="rec-modal" onclick="event.stopPropagation()">
+    <div class="rec-modal-title" id="recommendation-modal-title">추천제안 추가</div>
+    <input type="hidden" id="recommendation-modal-id">
+    <div class="rec-form-group">
+      <label class="rec-form-label" for="recommendation-modal-text">버튼 제목</label>
+      <input id="recommendation-modal-text" class="rec-form-input" type="text" placeholder="예: 요금제 비교 보기">
+    </div>
+    <div class="rec-form-group">
+      <div class="rec-form-label">링크 유형</div>
+      <div class="rec-type-row">
+        <label class="rec-type-pill active" id="recommend-pill-external">
+          <input type="radio" name="recommendation-link-type" value="external" checked>
+          외부 링크
+        </label>
+        <label class="rec-type-pill" id="recommend-pill-internal">
+          <input type="radio" name="recommendation-link-type" value="internal">
+          내부 링크
+        </label>
+      </div>
+    </div>
+    <div class="rec-form-group">
+      <label class="rec-form-label" for="recommendation-modal-link">연결 값</label>
+      <input id="recommendation-modal-link" class="rec-form-input" type="text" placeholder="https://example.com">
+      <div id="recommendation-modal-help" class="rec-form-help">외부 링크는 전체 URL을 입력하면 된다.</div>
+    </div>
+    <div class="rec-modal-actions">
+      <button class="btn-admin del" type="button" onclick="closeRecommendationModal()">취소</button>
+      <button class="btn-admin edit" type="button" onclick="saveRecommendationModal()">저장</button>
+    </div>
+  </div>
+</div>
+
+<div id="youtube-video-modal" class="video-modal-overlay" onclick="if(event.target===this) closeYoutubeVideoModal()">
+  <div class="video-modal" onclick="event.stopPropagation()">
+    <div class="video-modal-head">
+      <div class="video-modal-title" id="youtube-video-modal-title">참고 동영상</div>
+      <button class="video-close-btn" type="button" onclick="closeYoutubeVideoModal()">닫기</button>
+    </div>
+    <div class="video-embed-wrap">
+      <iframe id="youtube-video-modal-iframe" src="" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+    </div>
+  </div>
+</div>
+
+<script id="oai-admin-video-recommend-v2-script">
+(function(){
+  function esc(str=''){return String(str).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');}
+  function readSummaryMeta(summaryValue){
+    if(!summaryValue) return {};
+    try{
+      const parsed = JSON.parse(summaryValue);
+      if(parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+      return {};
+    }catch(e){ return {}; }
+  }
+  function buildSummaryMeta(videoTitle, videoUrl){
+    const base = (window.currentContentMeta && typeof window.currentContentMeta === 'object' && !Array.isArray(window.currentContentMeta)) ? {...window.currentContentMeta} : {};
+    const cleanTitle = String(videoTitle || '').trim();
+    const cleanUrl = String(videoUrl || '').trim();
+    if(cleanTitle || cleanUrl){
+      base.video = { title: cleanTitle, youtube_url: cleanUrl };
+    } else {
+      delete base.video;
+    }
+    return Object.keys(base).length ? JSON.stringify(base) : null;
+  }
+  function getVideoMeta(summaryValue){
+    const parsed = readSummaryMeta(summaryValue);
+    const video = parsed.video && typeof parsed.video === 'object' ? parsed.video : {};
+    return {
+      title: String(video.title || '').trim(),
+      youtube_url: String(video.youtube_url || '').trim()
+    };
+  }
+  function extractYoutubeId(url=''){
+    const value = String(url || '').trim();
+    if(!value) return '';
+    if(/^[a-zA-Z0-9_-]{11}$/.test(value)) return value;
+    try{
+      const u = new URL(value);
+      if(u.hostname.includes('youtu.be')) return u.pathname.replace('/','').slice(0,11);
+      if(u.searchParams.get('v')) return u.searchParams.get('v').slice(0,11);
+      const parts = u.pathname.split('/').filter(Boolean);
+      const embedIndex = parts.findIndex(p => p === 'embed' || p === 'shorts' || p === 'live');
+      if(embedIndex !== -1 && parts[embedIndex + 1]) return parts[embedIndex + 1].slice(0,11);
+      return '';
+    } catch(e) {
+      const match = value.match(/([a-zA-Z0-9_-]{11})/);
+      return match ? match[1] : '';
+    }
+  }
+  function getYoutubeEmbedUrl(url, autoplay=true){
+    const videoId = extractYoutubeId(url);
+    if(!videoId) return '';
+    return `https://www.youtube.com/embed/${videoId}?autoplay=${autoplay ? 1 : 0}&rel=0&modestbranding=1&playsinline=1`;
+  }
+  function renderVideoSection(videoMeta){
+    if(!videoMeta || !videoMeta.youtube_url || !extractYoutubeId(videoMeta.youtube_url)) return '';
+    const title = videoMeta.title || '참고 동영상';
+    return `
+      <div class="content-video-box">
+        <div class="recommend-title">🎬 참고 동영상</div>
+        <button type="button" class="content-video-trigger" onclick='openYoutubeVideoModal(${JSON.stringify(title)}, ${JSON.stringify(videoMeta.youtube_url)})'>
+          <span>${esc(title)}</span>
+          <span>재생하기</span>
+        </button>
+        <div class="content-video-sub">버튼을 누르면 팝업창에서 유튜브 영상이 자동재생된다.</div>
+      </div>
+    `;
+  }
+  function updateRecommendationTypeUI(type){
+    const externalPill = document.getElementById('recommend-pill-external');
+    const internalPill = document.getElementById('recommend-pill-internal');
+    const linkInput = document.getElementById('recommendation-modal-link');
+    const help = document.getElementById('recommendation-modal-help');
+    document.querySelectorAll('input[name="recommendation-link-type"]').forEach(r => r.checked = (r.value === type));
+    externalPill?.classList.toggle('active', type === 'external');
+    internalPill?.classList.toggle('active', type === 'internal');
+    if(linkInput){
+      linkInput.placeholder = type === 'internal' ? '예: content:34 / subcategory:12 / page-home' : 'https://example.com';
+    }
+    if(help){
+      help.textContent = type === 'internal'
+        ? '내부 링크는 content:34, subcategory:12, page-home 같은 형식으로 입력하면 된다.'
+        : '외부 링크는 https://를 포함한 전체 주소를 입력하면 된다.';
+    }
+  }
+  function getSelectedRecommendationType(){
+    return document.querySelector('input[name="recommendation-link-type"]:checked')?.value || 'external';
+  }
+  document.addEventListener('change', function(e){
+    if(e.target && e.target.name === 'recommendation-link-type') updateRecommendationTypeUI(e.target.value);
+  });
+
+  window.openYoutubeVideoModal = function(title, url){
+    const embedUrl = getYoutubeEmbedUrl(url, true);
+    if(!embedUrl){
+      alert('유효한 유튜브 링크가 아닙니다.');
+      return;
+    }
+    const modal = document.getElementById('youtube-video-modal');
+    const frame = document.getElementById('youtube-video-modal-iframe');
+    const titleEl = document.getElementById('youtube-video-modal-title');
+    if(titleEl) titleEl.textContent = title || '참고 동영상';
+    if(frame) frame.src = embedUrl;
+    if(modal) modal.style.display = 'flex';
+  };
+  window.closeYoutubeVideoModal = function(){
+    const modal = document.getElementById('youtube-video-modal');
+    const frame = document.getElementById('youtube-video-modal-iframe');
+    if(frame) frame.src = '';
+    if(modal) modal.style.display = 'none';
+  };
+  window.previewVideoInAdmin = function(){
+    const title = document.getElementById('content-video-title')?.value?.trim() || '참고 동영상';
+    const url = document.getElementById('content-video-url')?.value?.trim() || '';
+    if(!url){ alert('유튜브 링크를 먼저 입력하세요.'); return; }
+    window.openYoutubeVideoModal(title, url);
+  };
+
+  window.renderRecommendationManageList = function(items){
+    const wrap = document.getElementById('recommend-manage-list');
+    if(!wrap) return;
+    if(!items || !items.length){
+      wrap.innerHTML = '<div style="color:#888;">추천 제안이 없습니다.</div>';
+      return;
+    }
+    wrap.innerHTML = items.map(item => `
+      <div class="recommend-manage-item">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:700; margin-bottom:4px;">${esc(item.title)}</div>
+          <div style="font-size:12px; color:#777; margin-bottom:2px;">${item.link_type === 'internal' ? '내부링크' : '외부링크'}</div>
+          <div style="font-size:12px; color:#999; word-break:break-all;">${esc(item.link_value)}</div>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn-admin edit" onclick="moveRecommendation(${item.id}, ${item.sort_order}, -1)">↑</button>
+          <button class="btn-admin edit" onclick="moveRecommendation(${item.id}, ${item.sort_order}, 1)">↓</button>
+          <button class="btn-admin edit" onclick="editRecommendation(${item.id})">수정</button>
+          <button class="btn-admin del" onclick="deleteRecommendation(${item.id})">삭제</button>
+        </div>
+      </div>
+    `).join('');
+  };
+
+  window.openRecommendationModal = function(mode='add', item=null){
+    const overlay = document.getElementById('recommendation-modal-overlay');
+    document.getElementById('recommendation-modal-title').textContent = mode === 'edit' ? '추천제안 수정' : '추천제안 추가';
+    document.getElementById('recommendation-modal-id').value = item?.id || '';
+    document.getElementById('recommendation-modal-text').value = item?.title || '';
+    document.getElementById('recommendation-modal-link').value = item?.link_value || '';
+    updateRecommendationTypeUI(item?.link_type || 'external');
+    if(overlay) overlay.style.display = 'flex';
+    setTimeout(() => document.getElementById('recommendation-modal-text')?.focus(), 20);
+  };
+  window.closeRecommendationModal = function(){
+    const overlay = document.getElementById('recommendation-modal-overlay');
+    if(overlay) overlay.style.display = 'none';
+  };
+  window.addRecommendation = async function(){
+    if(!window.currentEduContentId){ alert('콘텐츠를 먼저 선택하세요.'); return; }
+    window.openRecommendationModal('add');
+  };
+  window.editRecommendation = async function(recommendationId){
+    const { data, error } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .select('*')
+      .eq('id', recommendationId)
+      .single();
+    if(error || !data){ console.error(error); alert('추천제안 정보를 불러오지 못했습니다.'); return; }
+    window.openRecommendationModal('edit', data);
+  };
+  window.saveRecommendationModal = async function(){
+    if(!window.currentEduContentId){ alert('콘텐츠를 먼저 선택하세요.'); return; }
+    const id = document.getElementById('recommendation-modal-id').value;
+    const title = document.getElementById('recommendation-modal-text').value.trim();
+    const linkType = getSelectedRecommendationType();
+    const linkValue = document.getElementById('recommendation-modal-link').value.trim();
+    if(!title){ alert('버튼 제목을 입력하세요.'); return; }
+    if(!linkValue){ alert('연결 값을 입력하세요.'); return; }
+    if(linkType === 'external' && !/^https?:\/\//i.test(linkValue)){
+      alert('외부 링크는 http:// 또는 https:// 로 시작해야 합니다.');
+      return;
+    }
+    if(!id){
+      const { data: lastRow, error: lastError } = await window.supabaseClient
+        .from('edu_content_recommendations')
+        .select('sort_order')
+        .eq('content_id', window.currentEduContentId)
+        .order('sort_order', { ascending:false })
+        .limit(1)
+        .maybeSingle();
+      if(lastError){ console.error(lastError); alert('추천제안 순서 조회 실패'); return; }
+      const nextSort = (lastRow?.sort_order || 0) + 1;
+      const { error } = await window.supabaseClient
+        .from('edu_content_recommendations')
+        .insert([{ content_id: window.currentEduContentId, title, link_type: linkType, link_value: linkValue, sort_order: nextSort, is_visible: true }]);
+      if(error){ console.error(error); alert('추천제안 추가 실패'); return; }
+    } else {
+      const { error } = await window.supabaseClient
+        .from('edu_content_recommendations')
+        .update({ title, link_type: linkType, link_value: linkValue })
+        .eq('id', Number(id));
+      if(error){ console.error(error); alert('추천제안 수정 실패'); return; }
+    }
+    window.closeRecommendationModal();
+    await window.loadContentRecommendations();
+    dirty = true;
+  };
+
+  window.openContent = async function(subcategoryId, title){
+    window.currentEduSubcategoryId = subcategoryId;
+    try{
+      const content = await window.ensureEduContentRecord(subcategoryId, title);
+      window.currentEduContentId = content.id;
+      window.currentContentMeta = readSummaryMeta(content.summary);
+      const recommendations = await fetchContentRecommendations(content.id);
+      const videoMeta = getVideoMeta(content.summary);
+      const recommendHtml = renderRecommendationButtons(recommendations);
+      const videoHtml = renderVideoSection(videoMeta);
+      const btn = document.querySelector('#page-content .btn-edit-content');
+      if(btn){
+        btn.dataset.mode = 'view';
+        btn.innerText = '내용 편집하기';
+        btn.style.background = 'var(--uplus-dark)';
+      }
+      dirty = false;
+      const viewHtml = `
+        <div id="edu-content-view">
+          <div id="edu-image-slider" style="margin-bottom:16px;"></div>
+          <div class="content-text-box" style="background:#fff; padding:16px; border-radius:12px; line-height:1.7; min-height:180px;">
+            ${content.content_html || '등록된 내용이 없습니다.'}
+          </div>
+          ${videoHtml}
+          ${recommendHtml}
+        </div>
+      `;
+      document.getElementById('page-content-dynamic-area').innerHTML = viewHtml;
+      document.getElementById('content-title').innerText = title;
+      window.goToPage('page-content', -1, title);
+      await window.loadContentImages();
+    }catch(e){ console.error(e); alert('콘텐츠를 열 수 없습니다.'); }
+  };
+
+  window.openContentEditor = async function(){
+    if(!window.currentEduContentId){ alert('콘텐츠를 먼저 선택하세요.'); return; }
+    const { data, error } = await window.supabaseClient.from('edu_contents').select('*').eq('id', window.currentEduContentId).single();
+    if(error){ console.error(error); alert('본문 조회 실패'); return; }
+    const { data: images, error: imageError } = await window.supabaseClient
+      .from('edu_content_images').select('*').eq('content_id', window.currentEduContentId).order('sort_order', { ascending: true });
+    if(imageError){ console.error(imageError); alert('이미지 목록 조회 실패'); return; }
+
+    window.currentContentMeta = readSummaryMeta(data.summary);
+    const videoMeta = getVideoMeta(data.summary);
+    const imageItems = (images || []).map(img => `
+      <div style="display:flex; align-items:center; gap:10px; padding:10px; border:1px solid #eee; border-radius:10px; margin-bottom:8px;">
+        <img src="${img.image_url}" style="width:88px; height:88px; object-fit:cover; border-radius:8px; background:#f6f6f6;">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:12px; color:#666;">순서: ${img.sort_order}</div>
+          <div style="font-size:12px; color:#999; word-break:break-all;">${img.image_url}</div>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, -1)">↑</button>
+          <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
+          <button class="btn-admin del" onclick="deleteContentImage(${img.id}, ${JSON.stringify(img.image_url)})">삭제</button>
+        </div>
+      </div>
+    `).join('');
+
+    const editorHtml = `
+      <div style="background:#fff; padding:16px; border-radius:12px;">
+        <div style="font-weight:700; margin-bottom:12px;">내용 편집</div>
+
+        <div style="margin-bottom:20px;">
+          <div style="font-weight:700; margin-bottom:10px;">참고 이미지</div>
+          <input type="file" id="edu-image-input" accept="image/*" multiple style="display:none;" onchange="uploadContentImages(event)">
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button class="btn-admin edit" onclick="document.getElementById('edu-image-input').click()">이미지 업로드</button>
+          </div>
+          <div>${imageItems || '<div style="color:#888;">등록된 이미지가 없습니다.</div>'}</div>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <div style="font-weight:700; margin-bottom:10px;">추천 제안</div>
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button class="btn-admin edit" onclick="addRecommendation()">+ 추가</button>
+          </div>
+          <div id="recommend-manage-list"><div style="color:#888;">불러오는 중...</div></div>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <div style="font-weight:700; margin-bottom:10px;">참고 동영상</div>
+          <div class="content-video-box" style="margin-top:0;">
+            <div class="rec-form-group" style="margin-bottom:10px;">
+              <label class="rec-form-label" for="content-video-title">버튼 제목</label>
+              <input id="content-video-title" class="rec-form-input" type="text" value="${esc(videoMeta.title)}" placeholder="예: 개통 설명 영상 보기">
+            </div>
+            <div class="rec-form-group" style="margin-bottom:0;">
+              <label class="rec-form-label" for="content-video-url">유튜브 링크</label>
+              <input id="content-video-url" class="rec-form-input" type="text" value="${esc(videoMeta.youtube_url)}" placeholder="https://www.youtube.com/watch?v=...">
+              <div class="rec-form-help">값이 비어 있으면 읽기 전용 페이지에서 동영상 박스는 자동으로 숨겨진다.</div>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end;">
+              <button class="btn-admin edit video-preview-btn" type="button" onclick="previewVideoInAdmin()">미리보기</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="font-weight:700; margin-bottom:10px;">본문</div>
+        <div class="content-toolbar admin-only" style="display:flex; margin-bottom:0; border-radius:12px 12px 0 0;">
+          <select onchange="execCmdFontSize(this.value)">
+            <option value="2">작게</option><option value="3" selected>기본</option><option value="4">약간크게</option><option value="5">크게</option>
+          </select>
+          <input type="color" onchange="execCmdColor(this.value)" style="padding:0; width:30px; height:24px; border:none; background:none;">
+          <button class="btn-sm btn-outline" style="font-weight:bold;" onclick="execCmdWrapper('bold')">B</button>
+          <button class="btn-sm btn-outline" style="font-style:italic;" onclick="execCmdWrapper('italic')">I</button>
+          <button class="btn-sm btn-outline" style="text-decoration:underline;" onclick="execCmdWrapper('underline')">U</button>
+          <button class="btn-sm btn-outline" onclick="setEditorAlign('left')">좌측</button>
+          <button class="btn-sm btn-outline" onclick="setEditorAlign('center')">중앙</button>
+          <button class="btn-sm btn-outline" onclick="setEditorAlign('right')">우측</button>
+          <button class="btn-sm btn-outline" onclick="insertEditorBlock('strong')">강조박스</button>
+          <button class="btn-sm btn-outline" onclick="insertEditorBlock('tip')">TIP박스</button>
+          <button class="btn-sm btn-outline" onclick="insertEditorBlock('warn')">주의박스</button>
+        </div>
+        <div id="editor-text" class="content-text-box" contenteditable="true" style="border-top-left-radius:0; border-top-right-radius:0; min-height:320px;">${data?.content_html || ''}</div>
+
+        <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+          <button class="btn-admin edit" onclick="saveContent()">저장</button>
+          <button class="btn-admin del" onclick="toggleContentEdit('page-content')">취소</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('page-content-dynamic-area').innerHTML = editorHtml;
+    bindEditorDirtyTracking();
+    document.getElementById('content-video-title')?.addEventListener('input', () => dirty = true);
+    document.getElementById('content-video-url')?.addEventListener('input', () => dirty = true);
+    dirty = false;
+    await window.loadContentRecommendations();
+  };
+
+  window.saveContent = async function(){
+    const content = document.getElementById('editor-text')?.innerHTML || '';
+    const videoTitle = document.getElementById('content-video-title')?.value || '';
+    const videoUrl = document.getElementById('content-video-url')?.value || '';
+    const summary = buildSummaryMeta(videoTitle, videoUrl);
+    const { error } = await window.supabaseClient
+      .from('edu_contents')
+      .update({
+        content_html: content,
+        title: document.getElementById('content-title').innerText.trim(),
+        summary: summary
+      })
+      .eq('id', window.currentEduContentId);
+    if(error){ console.error(error); alert('저장 실패'); return; }
+    window.currentContentMeta = readSummaryMeta(summary);
+    alert('저장 완료');
+    dirty = false;
+    const btn = document.querySelector('#page-content .btn-edit-content');
+    if(btn){ btn.dataset.mode = 'view'; btn.innerText = '내용 편집하기'; btn.style.background = 'var(--uplus-dark)'; }
+    await window.openContent(window.currentEduSubcategoryId, document.getElementById('content-title').innerText);
+  };
+
+  setTimeout(() => updateRecommendationTypeUI('external'), 0);
 })();
 </script>
 
