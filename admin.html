@@ -5059,11 +5059,11 @@ body.modal-open{overflow:hidden; touch-action:none;}
         <div class="recommend-title">💡 추천 제안</div>
         <div class="keyword-list content-keyword-list">
           ${items.map(item => `
-            <button
-              type="button"
-              class="recommend-link-btn"
-              onclick="window.handleRecommendationLink(${JSON.stringify(String(item.link_type || ''))}, ${JSON.stringify(String(item.link_value || ''))}, ${item.target_content_id ?? 'null'})"
-            >${esc(item.title)}</button>
+<button
+  type="button"
+  class="recommend-link-btn"
+  onclick='window.handleRecommendationLink(${JSON.stringify(String(item.link_type || ''))}, ${JSON.stringify(String(item.link_value || ''))}, ${item.target_content_id ?? 'null'})'
+>${esc(item.title)}</button>
           `).join('')}
         </div>
       </div>
@@ -5184,8 +5184,8 @@ body.modal-open{overflow:hidden; touch-action:none;}
           ${items.map(item => {
             const title = String(item.title || '참고 동영상').trim() || '참고 동영상';
             const rawUrl = String(item.video_url || '').trim();
-            const safeTitle = title.replace(/'/g, "\'");
-            const safeUrl = rawUrl.replace(/'/g, "\'");
+            const safeTitle = title.replace(/'/g, "\\'");
+            const safeUrl = rawUrl.replace(/'/g, "\\'");
             return `
               <button
                 type="button"
