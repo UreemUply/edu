@@ -2315,13 +2315,12 @@ function handleSliderImageUpload(event, isFullscreen) {
         }
     </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 <script>
   const SUPABASE_URL = 'https://ytnxmnbctujuopbqpurl.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_4oBm89ecivuVF6StOBz7yg_qNBItC4z';
   window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 </script>
-    
+
 <style id="oai-final-admin-patch-style">
 .content-page-dot{width:8px;height:8px;border-radius:999px;background:#d1d1d1;display:inline-block;cursor:pointer;transition:all .2s ease;}
 .content-page-dot.active{background:var(--uplus-magenta);width:20px;}
@@ -2776,13 +2775,12 @@ function handleSliderImageUpload(event, isFullscreen) {
   window.addRecommendItem = function(){
     const title = prompt('버튼 이름을 입력하세요.');
     if(!title) return;
-    const typeInput = prompt('링크 유형을 입력하세요. internal 또는 external', 'internal');
-    if(!typeInput) return;
-    const type = typeInput.toLowerCase() === 'external' ? 'external' : 'internal';
-    const urlInput = prompt(type === 'internal' ? '내부 링크 값을 입력하세요. 예: page-policy 또는 #page-policy' : '외부 링크 주소를 입력하세요.', type === 'internal' ? '#page-home' : 'https://');
+    const urlInput = prompt('링크를 입력하세요.\n- 외부링크: https://example.com\n- 내부링크: #page-home 또는 page-home');
     if(!urlInput) return;
+    const raw = urlInput.trim();
+    const type = /^https?:\/\//i.test(raw) ? 'external' : 'internal';
     const items = window.getCurrentRecommendItems();
-    items.push({ title:title.trim(), type, url:normalizeUrlByType(type, urlInput.trim()) });
+    items.push({ title:title.trim(), type, url:normalizeUrlByType(type, raw) });
     window.setCurrentRecommendItems(items);
   };
 
@@ -2792,12 +2790,11 @@ function handleSliderImageUpload(event, isFullscreen) {
     if(!item) return;
     const title = prompt('버튼 이름을 수정하세요.', item.title);
     if(!title) return;
-    const typeInput = prompt('링크 유형을 입력하세요. internal 또는 external', item.type);
-    if(!typeInput) return;
-    const type = typeInput.toLowerCase() === 'external' ? 'external' : 'internal';
-    const urlInput = prompt(type === 'internal' ? '내부 링크 값을 입력하세요.' : '외부 링크 주소를 입력하세요.', item.url);
+    const urlInput = prompt('링크를 수정하세요.\n- 외부링크: https://example.com\n- 내부링크: #page-home 또는 page-home', item.url);
     if(!urlInput) return;
-    items[index] = { title:title.trim(), type, url:normalizeUrlByType(type, urlInput.trim()) };
+    const raw = urlInput.trim();
+    const type = /^https?:\/\//i.test(raw) ? 'external' : 'internal';
+    items[index] = { title:title.trim(), type, url:normalizeUrlByType(type, raw) };
     window.setCurrentRecommendItems(items);
   };
 
@@ -2968,7 +2965,7 @@ function handleSliderImageUpload(event, isFullscreen) {
 
     container.innerHTML = `
       <div id="slider-surface" style="background:#fff; padding:12px; border-radius:12px;">
-        <img id="slider-image" src="${data[0].image_url}" style="width:100%; max-height:320px; object-fit:contain; border-radius:12px; background:#f7f7f7;">
+        <img id="slider-image" src="${data[0].image_url}" style="width:100%; max-height:320px; object-fit:contain; border-radius:12px; background:#f7f7f7; display:block;">
         <div id="slider-dots" style="display:flex; justify-content:center; gap:8px; margin-top:12px;">${dots}</div>
       </div>
     `;
@@ -2980,7 +2977,7 @@ function handleSliderImageUpload(event, isFullscreen) {
     const data = window._sliderData || [];
     if(!data.length) return;
     window._sliderIndex = index;
-    updateSliderView();
+    updateSliderView(false);
   };
 
   function bindContentSliderInteractions(){
@@ -3013,7 +3010,7 @@ function handleSliderImageUpload(event, isFullscreen) {
       if(!moved){
         if(touchX < rect.width * 0.3) prevImage();
         else if(touchX > rect.width * 0.7) nextImage();
-        else openZoomModal(img.src);
+        else openZoomModal(window._sliderIndex);
       }
     }, { passive:true });
 
@@ -3022,7 +3019,7 @@ function handleSliderImageUpload(event, isFullscreen) {
       const x = e.clientX - rect.left;
       if(x < rect.width * 0.3) prevImage();
       else if(x > rect.width * 0.7) nextImage();
-      else openZoomModal(img.src);
+      else openZoomModal(window._sliderIndex);
     });
   }
 
@@ -3030,27 +3027,110 @@ function handleSliderImageUpload(event, isFullscreen) {
     const data = window._sliderData || [];
     if(!data.length) return;
     window._sliderIndex = (window._sliderIndex - 1 + data.length) % data.length;
-    updateSliderView();
+    updateSliderView(false);
   };
   window.nextImage = function(){
     const data = window._sliderData || [];
     if(!data.length) return;
     window._sliderIndex = (window._sliderIndex + 1) % data.length;
-    updateSliderView();
+    updateSliderView(false);
   };
 
-  function updateSliderView(){
+  function updateSliderView(isFullscreen){
     const data = window._sliderData || [];
     const idx = window._sliderIndex || 0;
-    const img = document.getElementById('slider-image');
+    const img = document.getElementById(isFullscreen ? 'fullscreen-slider-image' : 'slider-image');
     if(!img || !data.length) return;
     img.src = data[idx].image_url;
-    const dots = document.querySelectorAll('#slider-dots .content-page-dot');
+    const dots = document.querySelectorAll((isFullscreen ? '#fullscreen-slider-dots' : '#slider-dots') + ' .content-page-dot');
     dots.forEach((dot, i) => {
       if(i === idx) dot.classList.add('active');
       else dot.classList.remove('active');
     });
   }
+
+  window.openZoomModal = function(startIndex){
+    const data = window._sliderData || [];
+    if(!data.length) return;
+    window._sliderIndex = typeof startIndex === 'number' ? startIndex : (window._sliderIndex || 0);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'fullscreen-slider-overlay';
+    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:99999; display:flex; align-items:center; justify-content:center; padding:20px;';
+    overlay.innerHTML = `
+      <button id="fullscreen-close-btn" style="position:absolute; top:18px; right:18px; width:40px; height:40px; border:none; border-radius:999px; background:rgba(255,255,255,.18); color:#fff; font-size:20px; cursor:pointer;">✕</button>
+      <div id="fullscreen-slider-surface" style="width:100%; max-width:1200px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+        <img id="fullscreen-slider-image" src="${data[window._sliderIndex].image_url}" style="max-width:100%; max-height:78vh; object-fit:contain; border-radius:12px;">
+        <div id="fullscreen-slider-dots" style="display:flex; justify-content:center; gap:8px; margin-top:16px;">
+          ${data.map((_, idx) => `<span class="content-page-dot${idx === window._sliderIndex ? ' active' : ''}" onclick="setFullscreenContentImagePage(${idx})"></span>`).join('')}
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const closeBtn = document.getElementById('fullscreen-close-btn');
+    closeBtn.onclick = () => overlay.remove();
+
+    overlay.addEventListener('click', (e) => {
+      if(e.target === overlay) overlay.remove();
+    });
+
+    let startX = 0, startY = 0, moved = false;
+    const surface = document.getElementById('fullscreen-slider-surface');
+    surface.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      startX = t.clientX; startY = t.clientY; moved = false;
+    }, { passive:true });
+    surface.addEventListener('touchmove', (e) => {
+      const t = e.touches[0];
+      if(Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10) moved = true;
+    }, { passive:true });
+    surface.addEventListener('touchend', (e) => {
+      const t = e.changedTouches[0];
+      const diffX = t.clientX - startX;
+      const absX = Math.abs(diffX);
+      const rect = surface.getBoundingClientRect();
+      const touchX = t.clientX - rect.left;
+
+      if(absX > 40){
+        if(diffX > 0) prevFullscreenImage(); else nextFullscreenImage();
+        return;
+      }
+      if(!moved){
+        if(touchX < rect.width * 0.3) prevFullscreenImage();
+        else if(touchX > rect.width * 0.7) nextFullscreenImage();
+      }
+    }, { passive:true });
+
+    surface.addEventListener('click', (e) => {
+      if(e.target.closest('#fullscreen-close-btn')) return;
+      const rect = surface.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      if(x < rect.width * 0.3) prevFullscreenImage();
+      else if(x > rect.width * 0.7) nextFullscreenImage();
+    });
+  };
+
+  window.setFullscreenContentImagePage = function(index){
+    const data = window._sliderData || [];
+    if(!data.length) return;
+    window._sliderIndex = index;
+    updateSliderView(true);
+  };
+
+  window.prevFullscreenImage = function(){
+    const data = window._sliderData || [];
+    if(!data.length) return;
+    window._sliderIndex = (window._sliderIndex - 1 + data.length) % data.length;
+    updateSliderView(true);
+  };
+
+  window.nextFullscreenImage = function(){
+    const data = window._sliderData || [];
+    if(!data.length) return;
+    window._sliderIndex = (window._sliderIndex + 1) % data.length;
+    updateSliderView(true);
+  };
 })();
 </script>
 
