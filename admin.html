@@ -195,6 +195,8 @@
     
         </div>
     </div>
+
+    
     </div>
 
     <div id="page-home" class="page active container">
@@ -465,68 +467,11 @@
             <div class="search-mini"><span class="icon">🔍</span><input type="text" placeholder="검색" oninput="filterSearch(this)"></div>
         </div>
         
-        <div class="level-tabs" id="edu-level-tabs">
-            <div class="level-tab active" onclick="switchLevelTab(this, 'level-1')">LEVEL 1 <span class="admin-only del-level" onclick="deleteLevel(event, this, 'level-1')">X</span></div>
-            <div class="level-tab" onclick="switchLevelTab(this, 'level-2')">LEVEL 2 <span class="admin-only del-level" onclick="deleteLevel(event, this, 'level-2')">X</span></div>
-            <div class="level-tab" onclick="switchLevelTab(this, 'level-3')">LEVEL 3 <span class="admin-only del-level" onclick="deleteLevel(event, this, 'level-3')">X</span></div>
-            <div class="level-tab" onclick="switchLevelTab(this, 'level-4')">LEVEL 4 <span class="admin-only del-level" onclick="deleteLevel(event, this, 'level-4')">X</span></div>
-            <button class="admin-only btn-admin add" style="width:auto; margin:0; padding: 4px 12px; font-size:12px;" onclick="addLevel()">+ 추가</button>
-        </div>
-        
-        <div id="edu-level-contents">
-            <div id="level-1" class="edu-level-content active">
-                <div class="accordion list-item-search">
-                    <div class="accordion-header" onclick="toggleAccordion(this)"><span class="main-cat-title">1. 기본기</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editMainCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteMainCat(this)">삭제</button></div></div>
-                    <div class="accordion-body">
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">매장관리</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">용모복장</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">NPS</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">WTS</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">고객체험(시연)</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <button class="admin-only btn-admin add" onclick="addSubCat(this)" style="width: calc(100% - 40px); margin: 0 20px;">+ 소분류 추가</button>
-                    </div>
-                </div>
-                <div class="accordion list-item-search">
-                    <div class="accordion-header" onclick="toggleAccordion(this)"><span class="main-cat-title">2. 고객 응대</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editMainCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteMainCat(this)">삭제</button></div></div>
-                    <div class="accordion-body">
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">표준SOP</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">통신용어</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">필름교체</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">요금수납</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">요금제변경</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">구매 기본 상담</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <button class="admin-only btn-admin add" onclick="addSubCat(this)" style="width: calc(100% - 40px); margin: 0 20px;">+ 소분류 추가</button>
-                    </div>
-                </div>
-                <div class="accordion list-item-search">
-                    <div class="accordion-header" onclick="toggleAccordion(this)"><span class="main-cat-title">3. 영업활동</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editMainCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteMainCat(this)">삭제</button></div></div>
-                    <div class="accordion-body">
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">UCRM</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <div class="sub-item list-item-search" onclick="openContent(this.querySelector('.sub-cat-title').innerText, this)"><span class="sub-cat-title">맞춤제안</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button></div></div>
-                        <button class="admin-only btn-admin add" onclick="addSubCat(this)" style="width: calc(100% - 40px); margin: 0 20px;">+ 소분류 추가</button>
-                    </div>
-                </div>
-            </div>
-            <div id="level-2" class="edu-level-content" style="display:none;">
-                <div class="accordion list-item-search">
-                    <div class="accordion-header" onclick="toggleAccordion(this)"><span class="main-cat-title">1. 심화학습 (예시)</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editMainCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteMainCat(this)">삭제</button></div></div>
-                    <div class="accordion-body"><button class="admin-only btn-admin add" onclick="addSubCat(this)" style="width: calc(100% - 40px); margin: 0 20px;">+ 소분류 추가</button></div>
-                </div>
-            </div>
-            <div id="level-3" class="edu-level-content" style="display:none;">
-                <div class="accordion list-item-search">
-                    <div class="accordion-header" onclick="toggleAccordion(this)"><span class="main-cat-title">1. 실전연습 (예시)</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editMainCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteMainCat(this)">삭제</button></div></div>
-                    <div class="accordion-body"><button class="admin-only btn-admin add" onclick="addSubCat(this)" style="width: calc(100% - 40px); margin: 0 20px;">+ 소분류 추가</button></div>
-                </div>
-            </div>
-            <div id="level-4" class="edu-level-content" style="display:none;">
-                <div class="accordion list-item-search">
-                    <div class="accordion-header" onclick="toggleAccordion(this)"><span class="main-cat-title">1. 관리자과정 (예시)</span><div class="admin-only admin-controls" onclick="event.stopPropagation();"><button class="btn-admin edit" onclick="editMainCat(this)">이름수정</button><button class="btn-admin del" onclick="deleteMainCat(this)">삭제</button></div></div>
-                    <div class="accordion-body"><button class="admin-only btn-admin add" onclick="addSubCat(this)" style="width: calc(100% - 40px); margin: 0 20px;">+ 소분류 추가</button></div>
-                </div>
-            </div>
-        </div>
-        <button class="admin-only btn-admin add" onclick="addMainCat()">+ 현재 레벨에 대분류 추가</button>
+        <div class="level-tabs" id="edu-level-tabs"></div>
+
+        <div id="edu-level-contents"></div>
+
+        <button class="admin-only btn-admin add" onclick="addMainCategory()">+ 현재 레벨에 대분류 추가</button>
     </div>
 
     <div id="template-page-notice-policy" style="display:none;">
