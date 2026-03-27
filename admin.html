@@ -195,6 +195,24 @@
     
         </div>
     </div>
+
+    
+        <div class="form-box" style="margin-top: 10px;">
+            <p style="font-size:12px; color:#e6007e; margin-bottom:15px;">* 가입 후 관리자 승인이 필요합니다.</p>
+            <label class="form-label">이름</label>
+            <input type="text" id="signup-name-input" class="form-input" placeholder="이름 입력">
+            <label class="form-label">연락처</label>
+            <input type="tel" class="form-input" placeholder="숫자만 입력">
+            <label class="form-label">소속 매장</label>
+            <select class="store-select form-input" id="signup-store-select">
+                <option value="" disabled selected>매장 선택</option>
+            </select>
+            <label class="form-label">아이디</label>
+            <input type="text" class="form-input" placeholder="사용할 아이디(사번)">
+            <label class="form-label">비밀번호</label>
+            <input type="password" class="form-input" placeholder="비밀번호 설정" style="margin-bottom: 24px;">
+            <button class="primary-btn" onclick="processSignup()">가입 완료</button>
+        </div>
     </div>
 
     <div id="page-home" class="page active container">
@@ -759,6 +777,7 @@
             showPageOnly('page-home');
             activateBottomNav(0);
             history.replaceState({ pageId: 'page-home', navIndex: 0 }, "", "#home");
+            loadEduLevels();
         };
 
         window.addEventListener('popstate', function(event) {
@@ -1346,96 +1365,516 @@
             });
         }
 
-        function switchLevelTab(tab, levelId) {
-            let parent = tab.closest('.level-tabs');
-            parent.querySelectorAll('.level-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            document.querySelectorAll('.edu-level-content').forEach(c => {
-                c.style.display = 'none';
-                c.classList.remove('active');
+        
+        /* =========================
+           EDU ADMIN + SUPABASE
+        ========================= */
+
+        let currentEduLevelId = null;
+        let currentEduCategoryId = null;
+        let currentEduSubcategoryId = null;
+        let currentEduContentId = null;
+
+        function escapeHtml(str = '') {
+            return String(str)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        function slugify(str = '') {
+            return String(str)
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, '-')
+                .replace(/[^a-z0-9가-힣-_]/g, '');
+        }
+
+        async function loadEduLevels() {
+            const { data, error } = await supabaseClient
+                .from('edu_levels')
+                .select('*')
+                .eq('is_visible', true)
+                .order('sort_order', { ascending: true });
+
+            if (error) {
+                console.error(error);
+                alert('레벨 조회 실패');
+                return;
+            }
+
+            renderEduLevels(data || []);
+
+            if (data && data.length > 0) {
+                const firstId = currentEduLevelId || data[0].id;
+                await selectEduLevel(firstId);
+            } else {
+                document.getElementById('edu-level-contents').innerHTML =
+                    '<div style="padding:20px; background:#fff; border-radius:12px; border:1px solid #e5e5e5;">등록된 레벨이 없습니다.</div>';
+            }
+        }
+
+        function renderEduLevels(levels) {
+            const tabs = document.getElementById('edu-level-tabs');
+            if (!tabs) return;
+
+            tabs.innerHTML = '';
+
+            levels.forEach(level => {
+                const activeClass = currentEduLevelId === level.id ? ' active' : '';
+                const tab = document.createElement('div');
+                tab.className = `level-tab${activeClass}`;
+                tab.innerHTML = `
+                    ${escapeHtml(level.name)}
+                    <span class="admin-only del-level" onclick="deleteLevel(event, ${level.id})">X</span>
+                `;
+                tab.onclick = () => selectEduLevel(level.id);
+                tabs.appendChild(tab);
             });
-            let content = document.getElementById(levelId);
-            if(content) {
-                content.style.display = 'block';
-                content.classList.add('active');
-            }
-        }
-        
-        function addLevel() {
-            let tabsContainer = document.getElementById('edu-level-tabs');
-            let tabs = tabsContainer.querySelectorAll('.level-tab');
-            let newIndex = tabs.length + 1;
-            let levelId = 'level-' + newIndex;
-            let tabHtml = `<div class="level-tab" onclick="switchLevelTab(this, '${levelId}')">LEVEL ${newIndex} <span class="admin-only del-level" onclick="deleteLevel(event, this, '${levelId}')">X</span></div>`;
-            tabsContainer.lastElementChild.insertAdjacentHTML('beforebegin', tabHtml);
-            let contentHtml = `<div id="${levelId}" class="edu-level-content" style="display:none;"></div>`;
-            document.getElementById('edu-level-contents').insertAdjacentHTML('beforeend', contentHtml);
+
+            const addBtn = document.createElement('button');
+            addBtn.className = 'admin-only btn-admin add';
+            addBtn.style.width = 'auto';
+            addBtn.style.margin = '0';
+            addBtn.style.padding = '4px 12px';
+            addBtn.style.fontSize = '12px';
+            addBtn.textContent = '+ 추가';
+            addBtn.onclick = addLevel;
+            tabs.appendChild(addBtn);
         }
 
-        function deleteLevel(event, btn, levelId) {
+        async function selectEduLevel(levelId) {
+            currentEduLevelId = levelId;
+            await loadEduCategories(levelId);
+            await refreshEduLevelTabsOnly();
+        }
+
+        async function refreshEduLevelTabsOnly() {
+            const { data, error } = await supabaseClient
+                .from('edu_levels')
+                .select('*')
+                .eq('is_visible', true)
+                .order('sort_order', { ascending: true });
+
+            if (!error) renderEduLevels(data || []);
+        }
+
+        async function addLevel() {
+            const name = prompt('새 레벨 이름을 입력하세요. 예: LEVEL 5');
+            if (!name) return;
+
+            const { data: lastRow } = await supabaseClient
+                .from('edu_levels')
+                .select('sort_order')
+                .order('sort_order', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const nextSort = (lastRow?.sort_order || 0) + 1;
+
+            const { error } = await supabaseClient
+                .from('edu_levels')
+                .insert([{
+                    name: name.trim(),
+                    slug: slugify(name),
+                    sort_order: nextSort,
+                    is_visible: true
+                }]);
+
+            if (error) {
+                console.error(error);
+                alert('레벨 추가 실패');
+                return;
+            }
+
+            await loadEduLevels();
+        }
+
+        async function deleteLevel(event, levelId) {
             event.stopPropagation();
-            if(confirm('해당 레벨과 모든 교육 내용을 삭제하시겠습니까?')) {
-                btn.closest('.level-tab').remove();
-                let content = document.getElementById(levelId);
-                if(content) content.remove();
-                document.querySelector('.level-tab').click(); 
+
+            if (!confirm('해당 레벨과 모든 교육 내용을 삭제하시겠습니까?')) return;
+
+            const { error } = await supabaseClient
+                .from('edu_levels')
+                .delete()
+                .eq('id', levelId);
+
+            if (error) {
+                console.error(error);
+                alert('레벨 삭제 실패');
+                return;
+            }
+
+            currentEduLevelId = null;
+            await loadEduLevels();
+        }
+
+        async function loadEduCategories(levelId) {
+            const { data, error } = await supabaseClient
+                .from('edu_categories')
+                .select('*')
+                .eq('level_id', levelId)
+                .eq('is_visible', true)
+                .order('sort_order', { ascending: true });
+
+            if (error) {
+                console.error(error);
+                alert('대분류 조회 실패');
+                return;
+            }
+
+            renderEduCategories(data || []);
+        }
+
+        function renderEduCategories(categories) {
+            const wrap = document.getElementById('edu-level-contents');
+            if (!wrap) return;
+
+            wrap.innerHTML = '';
+
+            if (!categories.length) {
+                wrap.innerHTML = `
+                    <div class="edu-level-content active" style="display:block;">
+                        <div style="padding:20px; background:#fff; border:1px solid #e5e5e5; border-radius:12px; margin-bottom:12px;">
+                            현재 레벨에 등록된 대분류가 없습니다.
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            const content = document.createElement('div');
+            content.className = 'edu-level-content active';
+            content.style.display = 'block';
+
+            categories.forEach(category => {
+                const accordion = document.createElement('div');
+                accordion.className = 'accordion list-item-search';
+                accordion.dataset.categoryId = category.id;
+
+                accordion.innerHTML = `
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <span class="main-cat-title">${escapeHtml(category.name)}</span>
+                        <div class="admin-only admin-controls" onclick="event.stopPropagation();">
+                            <button class="btn-admin edit" onclick="editMainCategory(${category.id}, '${escapeHtml(category.name)}')">이름수정</button>
+                            <button class="btn-admin del" onclick="deleteMainCategory(${category.id})">삭제</button>
+                        </div>
+                    </div>
+                    <div class="accordion-body" id="category-body-${category.id}">
+                        <div style="padding: 0 20px 10px; color:#888; font-size:12px;">불러오는 중...</div>
+                    </div>
+                `;
+
+                content.appendChild(accordion);
+            });
+
+            wrap.appendChild(content);
+
+            categories.forEach(category => {
+                loadEduSubcategories(category.id);
+            });
+        }
+
+        async function addMainCategory() {
+            if (!currentEduLevelId) {
+                alert('활성화된 레벨이 없습니다.');
+                return;
+            }
+
+            const name = prompt('새 대분류 이름을 입력하세요:');
+            if (!name) return;
+
+            const { data: lastRow } = await supabaseClient
+                .from('edu_categories')
+                .select('sort_order')
+                .eq('level_id', currentEduLevelId)
+                .order('sort_order', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const nextSort = (lastRow?.sort_order || 0) + 1;
+
+            const { error } = await supabaseClient
+                .from('edu_categories')
+                .insert([{
+                    level_id: currentEduLevelId,
+                    name: name.trim(),
+                    slug: slugify(name),
+                    sort_order: nextSort,
+                    is_visible: true
+                }]);
+
+            if (error) {
+                console.error(error);
+                alert('대분류 추가 실패');
+                return;
+            }
+
+            await loadEduCategories(currentEduLevelId);
+        }
+
+        async function editMainCategory(categoryId, currentName) {
+            const newName = prompt('대분류 이름을 수정하세요:', currentName);
+            if (!newName) return;
+
+            const { error } = await supabaseClient
+                .from('edu_categories')
+                .update({
+                    name: newName.trim(),
+                    slug: slugify(newName)
+                })
+                .eq('id', categoryId);
+
+            if (error) {
+                console.error(error);
+                alert('대분류 수정 실패');
+                return;
+            }
+
+            await loadEduCategories(currentEduLevelId);
+        }
+
+        async function deleteMainCategory(categoryId) {
+            if (!confirm('이 대분류를 삭제하시겠습니까?')) return;
+
+            const { error } = await supabaseClient
+                .from('edu_categories')
+                .delete()
+                .eq('id', categoryId);
+
+            if (error) {
+                console.error(error);
+                alert('대분류 삭제 실패');
+                return;
+            }
+
+            await loadEduCategories(currentEduLevelId);
+        }
+
+        async function loadEduSubcategories(categoryId) {
+            const { data, error } = await supabaseClient
+                .from('edu_subcategories')
+                .select('*')
+                .eq('category_id', categoryId)
+                .eq('is_visible', true)
+                .order('sort_order', { ascending: true });
+
+            const body = document.getElementById(`category-body-${categoryId}`);
+            if (!body) return;
+
+            if (error) {
+                console.error(error);
+                body.innerHTML = '<div style="padding: 0 20px 10px; color:red;">소분류 조회 실패</div>';
+                return;
+            }
+
+            body.innerHTML = '';
+
+            (data || []).forEach(sub => {
+                const item = document.createElement('div');
+                item.className = 'sub-item list-item-search';
+                item.style.opacity = '1';
+                item.setAttribute('onclick', `openContent(${sub.id}, '${escapeHtml(sub.name)}')`);
+                item.innerHTML = `
+                    <span class="sub-cat-title">${escapeHtml(sub.name)}</span>
+                    <div class="admin-only admin-controls" onclick="event.stopPropagation();">
+                        <button class="btn-admin edit" onclick="editSubCategory(${sub.id}, '${escapeHtml(sub.name)}')">이름수정</button>
+                        <button class="btn-admin del" onclick="deleteSubCategory(${sub.id})">삭제</button>
+                    </div>
+                `;
+                body.appendChild(item);
+            });
+
+            const addBtn = document.createElement('button');
+            addBtn.className = 'admin-only btn-admin add';
+            addBtn.style.width = 'calc(100% - 40px)';
+            addBtn.style.margin = '0 20px';
+            addBtn.textContent = '+ 소분류 추가';
+            addBtn.onclick = () => addSubCategory(categoryId);
+
+            body.appendChild(addBtn);
+        }
+
+        async function addSubCategory(categoryId) {
+            const name = prompt('새 소분류(교육 내용) 이름을 입력하세요:');
+            if (!name) return;
+
+            const { data: lastRow } = await supabaseClient
+                .from('edu_subcategories')
+                .select('sort_order')
+                .eq('category_id', categoryId)
+                .order('sort_order', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const nextSort = (lastRow?.sort_order || 0) + 1;
+
+            const { error } = await supabaseClient
+                .from('edu_subcategories')
+                .insert([{
+                    category_id: categoryId,
+                    name: name.trim(),
+                    slug: slugify(name),
+                    sort_order: nextSort,
+                    is_visible: true
+                }]);
+
+            if (error) {
+                console.error(error);
+                alert('소분류 추가 실패');
+                return;
+            }
+
+            await loadEduSubcategories(categoryId);
+        }
+
+        async function editSubCategory(subcategoryId, currentName) {
+            const newName = prompt('소분류 이름을 수정하세요:', currentName);
+            if (!newName) return;
+
+            const { error } = await supabaseClient
+                .from('edu_subcategories')
+                .update({
+                    name: newName.trim(),
+                    slug: slugify(newName)
+                })
+                .eq('id', subcategoryId);
+
+            if (error) {
+                console.error(error);
+                alert('소분류 수정 실패');
+                return;
+            }
+
+            const { data: sub } = await supabaseClient
+                .from('edu_subcategories')
+                .select('category_id')
+                .eq('id', subcategoryId)
+                .single();
+
+            if (sub?.category_id) {
+                await loadEduSubcategories(sub.category_id);
             }
         }
 
-        function addMainCat() {
-            let activeContent = document.querySelector('.edu-level-content.active');
-            if(!activeContent) return alert('활성화된 레벨이 없습니다.');
-            let title = prompt("새 대분류 이름을 입력하세요:");
-            if(!title) return;
-            let html = `
-            <div class="accordion list-item-search">
-                <div class="accordion-header" onclick="toggleAccordion(this)">
-                    <span class="main-cat-title">${title}</span>
-                    <div class="admin-only admin-controls" onclick="event.stopPropagation();">
-                        <button class="btn-admin edit" onclick="editMainCat(this)">이름수정</button>
-                        <button class="btn-admin del" onclick="deleteMainCat(this)">삭제</button>
-                    </div>
+        async function deleteSubCategory(subcategoryId) {
+            if (!confirm('이 소분류를 삭제하시겠습니까?')) return;
+
+            const { data: sub } = await supabaseClient
+                .from('edu_subcategories')
+                .select('category_id')
+                .eq('id', subcategoryId)
+                .single();
+
+            const { error } = await supabaseClient
+                .from('edu_subcategories')
+                .delete()
+                .eq('id', subcategoryId);
+
+            if (error) {
+                console.error(error);
+                alert('소분류 삭제 실패');
+                return;
+            }
+
+            if (sub?.category_id) {
+                await loadEduSubcategories(sub.category_id);
+            }
+        }
+
+        async function openContent(subcategoryId, title) {
+            currentEduSubcategoryId = subcategoryId;
+            currentEduContentId = null;
+
+            const { data, error } = await supabaseClient
+                .from('edu_contents')
+                .select('*')
+                .eq('subcategory_id', subcategoryId)
+                .order('sort_order', { ascending: true })
+                .limit(1)
+                .maybeSingle();
+
+            if (error) {
+                console.error(error);
+                alert('교육자료 조회 실패');
+                return;
+            }
+
+            currentEduContentId = data?.id || null;
+
+            const html = `
+                <div class="content-text-box" id="edu-content-editor" contenteditable="true">${data?.content_html || '내용을 입력하세요.'}</div>
+                <div style="margin-top:16px;">
+                    <button class="btn-admin edit" onclick="saveEduContent()">저장</button>
                 </div>
-                <div class="accordion-body">
-                    <button class="admin-only btn-admin add" onclick="addSubCat(this)" style="width: calc(100% - 40px); margin: 0 20px;">+ 소분류 추가</button>
-                </div>
-            </div>`;
-            activeContent.insertAdjacentHTML('beforeend', html);
-        }
-        
-        function editMainCat(btn) {
-            let titleSpan = btn.closest('.accordion-header').querySelector('.main-cat-title');
-            let newTitle = prompt("대분류 이름을 수정하세요:", titleSpan.innerText);
-            if(newTitle) titleSpan.innerText = newTitle;
+            `;
+
+            document.getElementById('page-content-dynamic-area').innerHTML = html;
+            document.getElementById('content-title').innerText = title;
+            goToPage('page-content', -1, title);
         }
 
-        function deleteMainCat(btn) {
-            if(confirm('이 대분류를 삭제하시겠습니까?')) btn.closest('.accordion').remove();
+        async function saveEduContent() {
+            if (!currentEduSubcategoryId) {
+                alert('선택된 소분류가 없습니다.');
+                return;
+            }
+
+            const editor = document.getElementById('edu-content-editor');
+            const html = editor ? editor.innerHTML : '';
+
+            if (currentEduContentId) {
+                const { error } = await supabaseClient
+                    .from('edu_contents')
+                    .update({
+                        title: document.getElementById('content-title').innerText.trim(),
+                        content_html: html
+                    })
+                    .eq('id', currentEduContentId);
+
+                if (error) {
+                    console.error(error);
+                    alert('교육자료 저장 실패');
+                    return;
+                }
+            } else {
+                const { data: lastRow } = await supabaseClient
+                    .from('edu_contents')
+                    .select('sort_order')
+                    .eq('subcategory_id', currentEduSubcategoryId)
+                    .order('sort_order', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                const nextSort = (lastRow?.sort_order || 0) + 1;
+
+                const { data, error } = await supabaseClient
+                    .from('edu_contents')
+                    .insert([{
+                        subcategory_id: currentEduSubcategoryId,
+                        title: document.getElementById('content-title').innerText.trim(),
+                        content_html: html,
+                        sort_order: nextSort,
+                        is_visible: true
+                    }])
+                    .select()
+                    .single();
+
+                if (error) {
+                    console.error(error);
+                    alert('교육자료 생성 실패');
+                    return;
+                }
+
+                currentEduContentId = data.id;
+            }
+
+            alert('저장되었습니다.');
         }
 
-        function addSubCat(addBtn) {
-            let title = prompt("새 소분류(교육 내용) 이름을 입력하세요:");
-            if(!title) return;
-            let html = `
-            <div class="sub-item list-item-search" onclick="openContent('${title}', this)">
-                <span class="sub-cat-title">${title}</span>
-                <div class="admin-only admin-controls" onclick="event.stopPropagation();">
-                    <button class="btn-admin edit" onclick="editSubCat(this)">이름수정</button>
-                    <button class="btn-admin del" onclick="deleteSubCat(this)">삭제</button>
-                </div>
-            </div>`;
-            addBtn.insertAdjacentHTML('beforebegin', html);
-        }
-
-        function editSubCat(btn) {
-            let titleSpan = btn.closest('.sub-item').querySelector('.sub-cat-title');
-            let newTitle = prompt("소분류 이름을 수정하세요:", titleSpan.innerText);
-            if(newTitle) titleSpan.innerText = newTitle;
-        }
-
-        function deleteSubCat(btn) {
-            if(confirm('이 소분류를 삭제하시겠습니까?')) btn.closest('.sub-item').remove();
-        }
 
         function handleSliderImageUpload(event, isFullscreen) {
             let file = event.target.files[0];
@@ -1517,5 +1956,11 @@
             document.getElementById('viewport-meta').setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
         }
     </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = 'https://ytnxmnbctujuopbqpurl.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_4oBm89ecivuVF6StOBz7yg_qNBItC4z';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+</script>
 </body>
 </html>
