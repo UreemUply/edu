@@ -5002,6 +5002,130 @@ body.modal-open{overflow:hidden; touch-action:none;}
     };
   }
 })();
+
+
+(function(){
+  function esc(str){
+    return String(str ?? '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  }
+
+  async function fetchRecommendationsLatest(contentId){
+    if(!contentId) return [];
+    const { data, error } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .select('id, content_id, title, link_type, link_value, target_content_id, sort_order, is_visible')
+      .eq('content_id', contentId)
+      .eq('is_visible', true)
+      .order('sort_order', { ascending:true })
+      .order('id', { ascending:true });
+
+    if(error){
+      console.error('추천제안 조회 실패:', error);
+      return [];
+    }
+
+    const targetIds = [...new Set((data || []).map(item => item.target_content_id).filter(Boolean))];
+    const titleMap = {};
+
+    if(targetIds.length){
+      const { data: targets, error: targetError } = await window.supabaseClient
+        .from('edu_contents')
+        .select('id, title')
+        .in('id', targetIds);
+      if(targetError){
+        console.error('추천제안 대상 콘텐츠 조회 실패:', targetError);
+      } else {
+        (targets || []).forEach(row => {
+          titleMap[row.id] = row.title || `콘텐츠 ${row.id}`;
+        });
+      }
+    }
+
+    return (data || []).map(item => ({
+      ...item,
+      target_content_title: item.target_content_id ? (titleMap[item.target_content_id] || `콘텐츠 ${item.target_content_id}`) : ''
+    }));
+  }
+
+  function renderRecommendationButtonsLatest(items){
+    if(!items || !items.length) return '';
+    return `
+      <div class="recommend-area">
+        <div class="recommend-title">💡 추천 제안</div>
+        <div class="keyword-list content-keyword-list">
+          ${items.map(item => `
+            <button
+              type="button"
+              class="recommend-link-btn"
+              onclick="window.handleRecommendationLink(${JSON.stringify(String(item.link_type || ''))}, ${JSON.stringify(String(item.link_value || ''))}, ${item.target_content_id ?? 'null'})"
+            >${esc(item.title)}</button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  window.fetchContentRecommendations = fetchRecommendationsLatest;
+  window.renderRecommendationButtons = renderRecommendationButtonsLatest;
+
+  window.openContent = async function(subcategoryId, title){
+    window.currentEduSubcategoryId = subcategoryId;
+    try{
+      const content = await window.ensureEduContentRecord(subcategoryId, title);
+      window.currentEduContentId = content.id;
+
+      const recommendations = await window.fetchContentRecommendations(content.id);
+      const videos = (typeof window.fetchContentVideos === 'function')
+        ? await window.fetchContentVideos(content.id)
+        : (typeof fetchContentVideos === 'function' ? await fetchContentVideos(content.id) : []);
+
+      const recommendHtml = window.renderRecommendationButtons(recommendations);
+      const videoHtml = (typeof renderVideoButtons === 'function') ? renderVideoButtons(videos) : '';
+
+      const btn = document.querySelector('#page-content .btn-edit-content');
+      if(btn){
+        btn.dataset.mode = 'view';
+        btn.innerText = '내용 편집하기';
+        btn.style.background = 'var(--uplus-dark)';
+      }
+
+      if(typeof window.setDirty === 'function'){
+        window.setDirty(false);
+      } else if(typeof setDirty === 'function'){
+        setDirty(false);
+      } else if(typeof dirty !== 'undefined') {
+        dirty = false;
+      }
+
+      const viewHtml = `
+        <div id="edu-content-view">
+          <div id="edu-image-slider" style="margin-bottom:16px;"></div>
+          <div class="content-text-box" style="background:#fff; padding:16px; border-radius:12px; line-height:1.7; min-height:180px;">
+            ${content.content_html || '등록된 내용이 없습니다.'}
+          </div>
+          ${videoHtml}
+          ${recommendHtml}
+        </div>
+      `;
+
+      document.getElementById('page-content-dynamic-area').innerHTML = viewHtml;
+      document.getElementById('content-title').innerText = title;
+      window.goToPage('page-content', -1, title);
+      if(typeof window.loadContentImages === 'function'){
+        await window.loadContentImages();
+      }
+    }catch(e){
+      console.error(e);
+      alert('콘텐츠를 열 수 없습니다.');
+    }
+  };
+})();
+
 </script>
 
 </body>
