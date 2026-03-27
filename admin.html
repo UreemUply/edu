@@ -2315,12 +2315,13 @@ function handleSliderImageUpload(event, isFullscreen) {
         }
     </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
   const SUPABASE_URL = 'https://ytnxmnbctujuopbqpurl.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_4oBm89ecivuVF6StOBz7yg_qNBItC4z';
-  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 </script>
-
+    
 <style id="oai-final-admin-patch-style">
 .content-page-dot{width:8px;height:8px;border-radius:999px;background:#d1d1d1;display:inline-block;cursor:pointer;transition:all .2s ease;}
 .content-page-dot.active{background:var(--uplus-magenta);width:20px;}
