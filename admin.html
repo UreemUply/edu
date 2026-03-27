@@ -5128,5 +5128,142 @@ body.modal-open{overflow:hidden; touch-action:none;}
 
 </script>
 
+
+<script id="oai-readonly-video-fix-v8">
+(function(){
+  function esc(str=''){
+    return String(str)
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'",'&#039;');
+  }
+
+  function extractYoutubeId(url=''){
+    const value = String(url || '').trim();
+    if(!value) return '';
+    if(/^[a-zA-Z0-9_-]{11}$/.test(value)) return value;
+    try{
+      const u = new URL(value);
+      if(u.hostname.includes('youtu.be')) return u.pathname.replace('/','').slice(0,11);
+      if(u.searchParams.get('v')) return u.searchParams.get('v').slice(0,11);
+      const parts = u.pathname.split('/').filter(Boolean);
+      const idx = parts.findIndex(p => ['embed','shorts','live'].includes(p));
+      if(idx !== -1 && parts[idx+1]) return parts[idx+1].slice(0,11);
+      return '';
+    }catch(e){
+      const match = value.match(/([a-zA-Z0-9_-]{11})/);
+      return match ? match[1] : '';
+    }
+  }
+
+  window.fetchContentVideos = async function(contentId){
+    if(!contentId || !window.supabaseClient) return [];
+    const { data, error } = await window.supabaseClient
+      .from('edu_content_videos')
+      .select('id, content_id, title, video_url, sort_order, is_visible')
+      .eq('content_id', contentId)
+      .eq('is_visible', true)
+      .order('sort_order', { ascending:true })
+      .order('id', { ascending:true });
+
+    if(error){
+      console.error('참고 동영상 조회 실패:', error);
+      return [];
+    }
+    return data || [];
+  };
+
+  window.renderVideoButtons = function(items){
+    if(!items || !items.length) return '';
+    return `
+      <div class="content-video-box">
+        <div class="recommend-title">🎬 참고 동영상</div>
+        <div class="keyword-list content-keyword-list video-button-list">
+          ${items.map(item => {
+            const title = String(item.title || '참고 동영상').trim() || '참고 동영상';
+            const rawUrl = String(item.video_url || '').trim();
+            const safeTitle = title.replace(/'/g, "\'");
+            const safeUrl = rawUrl.replace(/'/g, "\'");
+            return `
+              <button
+                type="button"
+                class="content-video-trigger"
+                onclick="openYoutubeVideoModal('${safeTitle}', '${safeUrl}')"
+              >
+                <span>${esc(title)}</span>
+                <span>재생하기</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+        <div class="content-video-sub">버튼을 누르면 팝업창에서 유튜브 영상이 자동재생된다.</div>
+      </div>
+    `;
+  };
+
+  const originalOpenContent = window.openContent;
+  window.openContent = async function(subcategoryId, title){
+    window.currentEduSubcategoryId = subcategoryId;
+    try{
+      const content = await window.ensureEduContentRecord(subcategoryId, title);
+      window.currentEduContentId = content.id;
+
+      const recommendations = (typeof window.fetchContentRecommendations === 'function')
+        ? await window.fetchContentRecommendations(content.id)
+        : [];
+      const videos = await window.fetchContentVideos(content.id);
+
+      const recommendHtml = (typeof window.renderRecommendationButtons === 'function')
+        ? window.renderRecommendationButtons(recommendations)
+        : '';
+      const videoHtml = (typeof window.renderVideoButtons === 'function')
+        ? window.renderVideoButtons(videos)
+        : '';
+
+      const btn = document.querySelector('#page-content .btn-edit-content');
+      if(btn){
+        btn.dataset.mode = 'view';
+        btn.innerText = '내용 편집하기';
+        btn.style.background = 'var(--uplus-dark)';
+      }
+
+      if(typeof window.setDirty === 'function'){
+        window.setDirty(false);
+      } else if(typeof setDirty === 'function') {
+        setDirty(false);
+      } else if(typeof dirty !== 'undefined') {
+        dirty = false;
+      }
+
+      const viewHtml = `
+        <div id="edu-content-view">
+          <div id="edu-image-slider" style="margin-bottom:16px;"></div>
+          <div class="content-text-box" style="background:#fff; padding:16px; border-radius:12px; line-height:1.7; min-height:180px;">
+            ${content.content_html || '등록된 내용이 없습니다.'}
+          </div>
+          ${videoHtml}
+          ${recommendHtml}
+        </div>
+      `;
+
+      document.getElementById('page-content-dynamic-area').innerHTML = viewHtml;
+      document.getElementById('content-title').innerText = title;
+      window.goToPage('page-content', -1, title);
+      if(typeof window.loadContentImages === 'function'){
+        await window.loadContentImages();
+      }
+    }catch(e){
+      console.error(e);
+      if(typeof originalOpenContent === 'function'){
+        return originalOpenContent(subcategoryId, title);
+      }
+      alert('콘텐츠를 열 수 없습니다.');
+    }
+  };
+})();
+</script>
+
 </body>
 </html>
