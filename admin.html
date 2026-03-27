@@ -1141,10 +1141,36 @@
         }
 
         function toggleContentEdit(pageId) {
+            if (pageId === 'page-content') {
+                const btn = document.querySelector('#page-content .btn-edit-content');
+                if (!currentEduSubcategoryId) {
+                    alert('소분류를 먼저 선택하세요.');
+                    return;
+                }
+
+                const isEditing = btn && btn.dataset.mode === 'edit';
+
+                if (isEditing) {
+                    if (btn) {
+                        btn.dataset.mode = 'view';
+                        btn.innerText = '내용 편집하기';
+                        btn.style.background = 'var(--uplus-dark)';
+                    }
+                    openContent(currentEduSubcategoryId, document.getElementById('content-title').innerText);
+                } else {
+                    if (btn) {
+                        btn.dataset.mode = 'edit';
+                        btn.innerText = '편집 취소';
+                        btn.style.background = 'var(--uplus-magenta)';
+                    }
+                    openContentEditor();
+                }
+                return;
+            }
+
             let page = document.getElementById(pageId);
             let dynamicAreaId = '';
-            if(pageId === 'page-content') dynamicAreaId = 'page-content-dynamic-area';
-            else if(pageId === 'page-fullscreen-viewer') dynamicAreaId = 'page-fullscreen-dynamic-area';
+            if(pageId === 'page-fullscreen-viewer') dynamicAreaId = 'page-fullscreen-dynamic-area';
             else if(pageId === 'page-notice-detail') dynamicAreaId = 'page-notice-dynamic-area';
             else if(pageId === 'page-policy-detail') dynamicAreaId = 'page-policy-dynamic-area';
 
@@ -1152,7 +1178,7 @@
             let contentBox = dynamicArea.querySelector('.content-text-box');
             let toolbar = page.querySelector('.content-toolbar');
             let btn = page.querySelector('.btn-edit-content');
-            
+
             if (contentBox.isContentEditable) {
                 contentBox.contentEditable = "false";
                 contentBox.classList.remove('editable');
@@ -1520,19 +1546,41 @@
                 accordion.className = 'accordion list-item-search';
                 accordion.dataset.categoryId = category.id;
 
-                accordion.innerHTML = `
-                    <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="main-cat-title">${escapeHtml(category.name)}</span>
-                        <div class="admin-only admin-controls" onclick="event.stopPropagation();">
-                            <button class="btn-admin edit" onclick="editMainCategory(${category.id}, ${JSON.stringify(category.name)})">이름수정</button>
-                            <button class="btn-admin del" onclick="deleteMainCategory(${category.id})">삭제</button>
-                        </div>
-                    </div>
-                    <div class="accordion-body" id="category-body-${category.id}">
-                        <div style="padding: 0 20px 10px; color:#888; font-size:12px;">불러오는 중...</div>
-                    </div>
-                `;
+                const header = document.createElement('div');
+                header.className = 'accordion-header';
+                header.onclick = () => toggleAccordion(header);
 
+                const title = document.createElement('span');
+                title.className = 'main-cat-title';
+                title.textContent = category.name;
+
+                const controls = document.createElement('div');
+                controls.className = 'admin-only admin-controls';
+                controls.onclick = (event) => event.stopPropagation();
+
+                const editBtn = document.createElement('button');
+                editBtn.className = 'btn-admin edit';
+                editBtn.textContent = '이름수정';
+                editBtn.onclick = () => editMainCategory(category.id, category.name);
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn-admin del';
+                delBtn.textContent = '삭제';
+                delBtn.onclick = () => deleteMainCategory(category.id);
+
+                controls.appendChild(editBtn);
+                controls.appendChild(delBtn);
+
+                header.appendChild(title);
+                header.appendChild(controls);
+
+                const body = document.createElement('div');
+                body.className = 'accordion-body';
+                body.id = `category-body-${category.id}`;
+                body.innerHTML = `<div style="padding: 0 20px 10px; color:#888; font-size:12px;">불러오는 중...</div>`;
+
+                accordion.appendChild(header);
+                accordion.appendChild(body);
                 content.appendChild(accordion);
             });
 
@@ -1623,7 +1671,7 @@
 
             if (error) {
                 console.error(error);
-                body.innerHTML = '<div style="padding: 0 20px 10px; color:red;">소분류 조회 실패</div>';
+                body.innerHTML = '<div style="padding:0 20px 10px; color:red;">소분류 조회 실패</div>';
                 return;
             }
 
@@ -1634,13 +1682,30 @@
                 item.className = 'sub-item list-item-search';
                 item.style.opacity = '1';
                 item.onclick = () => openContent(sub.id, sub.name);
-                item.innerHTML = `
-                    <span class="sub-cat-title">${escapeHtml(sub.name)}</span>
-                    <div class="admin-only admin-controls" onclick="event.stopPropagation();">
-                        <button class="btn-admin edit" onclick="editSubCategory(${sub.id}, ${JSON.stringify(sub.name)})">이름수정</button>
-                        <button class="btn-admin del" onclick="deleteSubCategory(${sub.id})">삭제</button>
-                    </div>
-                `;
+
+                const title = document.createElement('span');
+                title.className = 'sub-cat-title';
+                title.textContent = sub.name;
+
+                const controls = document.createElement('div');
+                controls.className = 'admin-only admin-controls';
+                controls.onclick = (event) => event.stopPropagation();
+
+                const editBtn = document.createElement('button');
+                editBtn.className = 'btn-admin edit';
+                editBtn.textContent = '이름수정';
+                editBtn.onclick = () => editSubCategory(sub.id, sub.name);
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn-admin del';
+                delBtn.textContent = '삭제';
+                delBtn.onclick = () => deleteSubCategory(sub.id);
+
+                controls.appendChild(editBtn);
+                controls.appendChild(delBtn);
+
+                item.appendChild(title);
+                item.appendChild(controls);
                 body.appendChild(item);
             });
 
@@ -1650,6 +1715,7 @@
             addBtn.style.margin = '0 20px';
             addBtn.textContent = '+ 소분류 추가';
             addBtn.onclick = () => addSubCategory(categoryId);
+
             body.appendChild(addBtn);
         }
 
@@ -1739,17 +1805,19 @@
                 const content = await ensureEduContentRecord(subcategoryId, title);
                 currentEduContentId = content.id;
 
+                const btn = document.querySelector('#page-content .btn-edit-content');
+                if (btn) {
+                    btn.dataset.mode = 'view';
+                    btn.innerText = '내용 편집하기';
+                    btn.style.background = 'var(--uplus-dark)';
+                }
+
                 const viewHtml = `
                     <div id="edu-content-view">
                         <div id="edu-image-slider" style="margin-bottom:16px;"></div>
 
-                        <div style="background:#fff; padding:16px; border-radius:12px; line-height:1.7; min-height:180px;">
+                        <div class="content-text-box" style="background:#fff; padding:16px; border-radius:12px; line-height:1.7; min-height:180px;">
                             ${content.content_html || '등록된 내용이 없습니다.'}
-                        </div>
-
-                        <div class="admin-only" style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
-                            <button class="btn-admin edit" onclick="openContentEditor()">내용 편집하기</button>
-                            <button class="btn-admin edit" onclick="openImageManager()">이미지 관리</button>
                         </div>
                     </div>
                 `;
@@ -1782,13 +1850,52 @@
                 return;
             }
 
+            const { data: images, error: imageError } = await supabaseClient
+                .from('edu_content_images')
+                .select('*')
+                .eq('content_id', currentEduContentId)
+                .order('sort_order', { ascending: true });
+
+            if (imageError) {
+                console.error(imageError);
+                alert('이미지 목록 조회 실패');
+                return;
+            }
+
+            const imageItems = (images || []).map(img => `
+                <div style="display:flex; align-items:center; gap:10px; padding:10px; border:1px solid #eee; border-radius:10px; margin-bottom:8px;">
+                    <img src="${img.image_url}" style="width:88px; height:88px; object-fit:cover; border-radius:8px; background:#f6f6f6;">
+                    <div style="flex:1;">
+                        <div style="font-size:12px; color:#666;">순서: ${img.sort_order}</div>
+                        <div style="font-size:12px; color:#999; word-break:break-all;">${img.image_url}</div>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, -1)">↑</button>
+                        <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
+                        <button class="btn-admin del" data-url="${img.image_url}" onclick="deleteContentImage(${img.id}, this.dataset.url)">삭제</button>
+                    </div>
+                </div>
+            `).join('');
+
             const editorHtml = `
                 <div style="background:#fff; padding:16px; border-radius:12px;">
                     <div style="font-weight:700; margin-bottom:12px;">내용 편집</div>
+
+                    <div style="margin-bottom:20px;">
+                        <div style="font-weight:700; margin-bottom:10px;">참고 이미지</div>
+                        <input type="file" id="edu-image-input" accept="image/*" multiple style="display:none;" onchange="uploadContentImages(event)">
+                        <div style="display:flex; gap:8px; margin-bottom:12px;">
+                            <button class="btn-admin edit" onclick="document.getElementById('edu-image-input').click()">이미지 업로드</button>
+                        </div>
+                        <div>${imageItems || '<div style="color:#888;">등록된 이미지가 없습니다.</div>'}</div>
+                    </div>
+
+                    <div style="font-weight:700; margin-bottom:10px;">본문</div>
                     <textarea id="editor-text" style="width:100%; min-height:320px; padding:12px; border:1px solid #ddd; border-radius:10px; resize:vertical;">${data?.content_html || ''}</textarea>
+
                     <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
                         <button class="btn-admin edit" onclick="saveContent()">저장</button>
-                        <button class="btn-admin del" onclick="openContent(currentEduSubcategoryId, document.getElementById('content-title').innerText)">취소</button>
+                        <button class="btn-admin del" onclick="toggleContentEdit('page-content')">취소</button>
                     </div>
                 </div>
             `;
@@ -1797,18 +1904,13 @@
         }
 
         async function saveContent() {
-            if (!currentEduContentId) {
-                alert('저장할 콘텐츠가 없습니다.');
-                return;
-            }
-
-            const contentHtml = document.getElementById('editor-text')?.value || '';
+            const content = document.getElementById('editor-text')?.value || '';
 
             const { error } = await supabaseClient
                 .from('edu_contents')
                 .update({
-                    title: document.getElementById('content-title').innerText.trim(),
-                    content_html: contentHtml
+                    content_html: content,
+                    title: document.getElementById('content-title').innerText.trim()
                 })
                 .eq('id', currentEduContentId);
 
@@ -1819,6 +1921,14 @@
             }
 
             alert('저장 완료');
+
+            const btn = document.querySelector('#page-content .btn-edit-content');
+            if (btn) {
+                btn.dataset.mode = 'view';
+                btn.innerText = '내용 편집하기';
+                btn.style.background = 'var(--uplus-dark)';
+            }
+
             await openContent(currentEduSubcategoryId, document.getElementById('content-title').innerText);
         }
 
