@@ -1802,10 +1802,6 @@
             if (sub?.category_id) await loadEduSubcategories(sub.category_id);
         }
 
-        async function fetchContentRecommendations() { 
-        return await loadContentRecommendations(); 
-        }
-        
         async function openContent(subcategoryId, title) {
             currentEduSubcategoryId = subcategoryId;
 
@@ -3524,6 +3520,38 @@ function handleSliderImageUpload(event, isFullscreen) {
       title: String(video.title || '').trim(),
       youtube_url: String(video.youtube_url || '').trim()
     };
+  }
+  async function fetchContentRecommendations(contentId){
+    if(!contentId) return [];
+    const { data, error } = await window.supabaseClient
+      .from('edu_content_recommendations')
+      .select('*')
+      .eq('content_id', contentId)
+      .eq('is_visible', true)
+      .order('sort_order', { ascending:true })
+      .order('id', { ascending:true });
+    if(error){
+      console.error(error);
+      return [];
+    }
+    return data || [];
+  }
+  function renderRecommendationButtons(items){
+    if(!items || !items.length) return '';
+    return `
+      <div class="recommend-area">
+        <div class="recommend-title">💡 추천 제안</div>
+        <div class="keyword-list content-keyword-list">
+          ${items.map(item => `
+            <button
+              type="button"
+              class="recommend-link-btn"
+              onclick='handleRecommendationLink(${JSON.stringify(item.link_type)}, ${JSON.stringify(item.link_value)})'
+            >${esc(item.title)}</button>
+          `).join('')}
+        </div>
+      </div>
+    `;
   }
   function extractYoutubeId(url=''){
     const value = String(url || '').trim();
