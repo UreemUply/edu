@@ -3774,8 +3774,9 @@ function handleSliderImageUpload(event, isFullscreen) {
   }
 
   function renderPostDetail(post, images) {
-    const sliderItems = (images || []).length
-      ? images.map(img => `<div class="fs-item"><img src="${escapeHtml(img.image_url || '')}" alt="img"></div>`).join('')
+    const safeImages = Array.isArray(images) ? images : [];
+    const sliderItems = safeImages.length
+      ? safeImages.map((img, index) => `<div class="fs-item"><img src="${escapeHtml(img.image_url || '')}" alt="img" data-viewer-index="${index}" style="cursor:pointer;"></div>`).join('')
       : `<div class="fs-item" style="color:#fff; font-size:14px;">등록된 이미지가 없습니다.</div>`;
     return `
       <div class="fullscreen-viewer">
@@ -3790,15 +3791,24 @@ function handleSliderImageUpload(event, isFullscreen) {
     try {
       const { post, images } = await fetchPostDetail(postId);
       currentViewerPost = post;
+      const safeImages = Array.isArray(images) ? images : [];
+      window._sliderData = safeImages.map(img => ({ image_url: img.image_url || '' }));
+      window._sliderIndex = 0;
       document.getElementById('viewer-title').innerText = post.title || '상세 보기';
-      document.getElementById('page-fullscreen-dynamic-area').innerHTML = renderPostDetail(post, images);
-      const editBtn = document.querySelector('#page-fullscreen-viewer .admin-controls .btn-admin.edit[style*="var(--uplus-dark)"]') || document.querySelector('#page-fullscreen-viewer .btn-edit-content');
+      document.getElementById('page-fullscreen-dynamic-area').innerHTML = renderPostDetail(post, safeImages);
       const controls = document.querySelector('#page-fullscreen-viewer .admin-controls');
       if (controls) {
         controls.innerHTML = `<button class="btn-admin edit" style="background:var(--uplus-dark); padding:6px 12px;" onclick="openBoardPostEditor(${post.id})">editor2에서 편집하기</button>`;
       }
       if (typeof generateDots === 'function') generateDots('#page-fullscreen-dynamic-area .fs-slider', '#page-fullscreen-dynamic-area .fs-dots', 'fs-dot');
       if (typeof bindScrollDots === 'function') bindScrollDots('#page-fullscreen-dynamic-area .fs-slider', '#page-fullscreen-dynamic-area .fs-dots', 'fs-dot');
+      document.querySelectorAll('#page-fullscreen-dynamic-area .fs-item img[data-viewer-index]').forEach(function(imgEl){
+        imgEl.addEventListener('click', function(event){
+          event.stopPropagation();
+          const index = Number(this.getAttribute('data-viewer-index') || 0);
+          if (typeof window.openZoomModal === 'function') window.openZoomModal(index);
+        });
+      });
       window.goToPage('page-fullscreen-viewer', -1, post.title || '상세 보기');
     } catch (e) {
       console.error(e);
