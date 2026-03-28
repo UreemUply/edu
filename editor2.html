@@ -91,8 +91,7 @@
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn btn-light" type="button" onclick="goBack()">목록으로</button>
-      <button class="btn btn-ok" type="button" onclick="savePost('draft')">임시저장</button>
-      <button class="btn btn-primary" type="button" onclick="savePost('published')">발행</button>
+      <button class="btn btn-primary" type="button" onclick="savePost()">저장</button>
     </div>
   </div>
 
@@ -123,15 +122,7 @@
         </div>
 
         <div style="height:12px"></div>
-        <div class="grid-2">
-          <div>
-            <div class="label">노출 상태</div>
-            <select id="statusSelect">
-              <option value="draft">임시저장</option>
-              <option value="published">발행</option>
-            </select>
-          </div>
-          <div>
+        <div class="grid-2">          <div>
             <div class="label">정렬값</div>
             <input id="sortOrderInput" type="number" value="0" />
           </div>
@@ -139,7 +130,6 @@
 
         <div style="height:12px"></div>
         <div class="grid-2">
-          <label class="pill"><input id="visibleCheckbox" type="checkbox" checked /> 노출</label>
           <label class="pill"><input id="pinnedCheckbox" type="checkbox" /> 상단고정</label>
         </div>
       </div>
@@ -214,8 +204,7 @@
   <div class="footer">
     <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
       <button class="btn btn-light" type="button" onclick="goBack()">취소</button>
-      <button class="btn btn-ok" type="button" onclick="savePost('draft')">임시저장</button>
-      <button class="btn btn-primary" type="button" onclick="savePost('published')">발행</button>
+      <button class="btn btn-primary" type="button" onclick="savePost()">저장</button>
     </div>
   </div>
 </div>
@@ -249,8 +238,7 @@ let draft = {
   title: '',
   summary: '',
   body_html: '',
-  status: 'draft',
-  is_visible: true,
+  status: 'published',
   is_pinned: false,
   sort_order: 0,
   thumbnail: {
@@ -283,7 +271,7 @@ function setDirty(next = true){
 
 function bindDirtyEvents(){
   [
-    'titleInput','summaryInput','statusSelect','sortOrderInput','visibleCheckbox','pinnedCheckbox'
+    'titleInput','summaryInput','sortOrderInput','pinnedCheckbox'
   ].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -406,8 +394,7 @@ async function loadPost(postId){
   draft.title = post.title || '';
   draft.summary = post.summary || '';
   draft.body_html = post.body_html || '';
-  draft.status = post.status || 'draft';
-  draft.is_visible = !!post.is_visible;
+  draft.status = 'published';
   draft.is_pinned = !!post.is_pinned;
   draft.sort_order = Number(post.sort_order || 0);
   draft.thumbnail = {
@@ -436,9 +423,7 @@ async function loadPost(postId){
 function renderAll(){
   document.getElementById('titleInput').value = draft.title || '';
   document.getElementById('summaryInput').value = draft.summary || '';
-  document.getElementById('statusSelect').value = draft.status || 'draft';
   document.getElementById('sortOrderInput').value = Number(draft.sort_order || 0);
-  document.getElementById('visibleCheckbox').checked = !!draft.is_visible;
   document.getElementById('pinnedCheckbox').checked = !!draft.is_pinned;
   document.getElementById('editorText').innerHTML = draft.body_html || '';
   renderThumbnail();
@@ -574,13 +559,12 @@ function collectFormValues(){
   draft.title = document.getElementById('titleInput').value.trim();
   draft.summary = document.getElementById('summaryInput').value.trim();
   draft.body_html = document.getElementById('editorText').innerHTML.trim();
-  draft.status = document.getElementById('statusSelect').value === 'published' ? 'published' : 'draft';
-  draft.is_visible = document.getElementById('visibleCheckbox').checked;
+  draft.status = 'published';
   draft.is_pinned = document.getElementById('pinnedCheckbox').checked;
   draft.sort_order = Number(document.getElementById('sortOrderInput').value || 0);
 }
 
-function validateDraft(targetStatus){
+function validateDraft(){
   collectFormValues();
 
   if (!draft.category_id) {
@@ -596,8 +580,8 @@ function validateDraft(targetStatus){
     alert('썸네일 이미지는 필수입니다.');
     return false;
   }
-  if (targetStatus === 'published' && !draft.body_html.replace(/<[^>]+>/g, '').trim() && !activeImageCount()) {
-    alert('발행하려면 본문 또는 상단 이미지가 필요합니다.');
+  if (!draft.body_html.replace(/<[^>]+>/g, '').trim() && !activeImageCount()) {
+    alert('본문 또는 상단 이미지가 필요합니다.');
     return false;
   }
   return true;
@@ -607,10 +591,9 @@ function activeImageCount(){
   return draft.images.filter(item => item._status !== 'delete').length;
 }
 
-async function savePost(targetStatus){
-  if (!validateDraft(targetStatus)) return;
-  draft.status = targetStatus;
-  document.getElementById('statusSelect').value = targetStatus;
+async function savePost(){
+  if (!validateDraft()) return;
+  draft.status = 'published';
 
   const saveStatus = document.getElementById('saveStatus');
   saveStatus.textContent = '저장 중...';
@@ -629,7 +612,7 @@ async function savePost(targetStatus){
       summary: draft.summary,
       body_html: draft.body_html,
       status: draft.status,
-      is_visible: draft.is_visible,
+      is_visible: true,
       is_pinned: draft.is_pinned,
       sort_order: draft.sort_order,
       thumbnail_url: thumbnailInfo.url,
@@ -708,11 +691,13 @@ async function savePost(targetStatus){
     renderAll();
     updateEditorPath();
     setDirty(false);
-    saveStatus.textContent = targetStatus === 'published' ? '발행 완료' : '임시저장 완료';
+    saveStatus.textContent = '저장 완료';
     saveStatus.className = 'status ok';
 
     const nextUrl = buildAdminUrl();
-    history.replaceState({}, '', `editor2.html?id=${savedId}`);
+    suppressBeforeUnload = true;
+    window.location.href = buildAdminUrl();
+    return;
     window.__editor2_last_admin_url = nextUrl;
   } catch (error) {
     console.error(error);
@@ -794,12 +779,53 @@ function formatBlockTag(tag){
   setDirty(true);
 }
 
+function placeCaretAtStart(node){
+  const range = document.createRange();
+  const sel = window.getSelection();
+  range.selectNodeContents(node);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function handleEditorKeydown(event){
+  if (event.key !== 'Enter' || event.shiftKey) return;
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  let node = sel.anchorNode;
+  if (!node) return;
+  if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+  const box = node && node.closest ? node.closest('.box-tip, .box-warn, .box-strong') : null;
+  if (!box) return;
+  event.preventDefault();
+  const p = document.createElement('p');
+  p.innerHTML = '<br>';
+  box.insertAdjacentElement('afterend', p);
+  placeCaretAtStart(p);
+  setDirty(true);
+}
+
 function insertBlock(type){
+  const editor = document.getElementById('editorText');
   const className = type === 'tip' ? 'box-tip' : type === 'warn' ? 'box-warn' : 'box-strong';
   const text = type === 'tip' ? 'TIP 내용을 입력하세요.' : type === 'warn' ? '주의 내용을 입력하세요.' : '강조 내용을 입력하세요.';
-  const html = `<div class="${className}">${text}</div><p></p>`;
-  document.execCommand('insertHTML', false, html);
-  document.getElementById('editorText').focus();
+  const box = document.createElement('div');
+  box.className = className;
+  box.textContent = text;
+  const p = document.createElement('p');
+  p.innerHTML = '<br>';
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(p);
+    range.insertNode(box);
+  } else {
+    editor.appendChild(box);
+    editor.appendChild(p);
+  }
+  editor.focus();
+  placeCaretAtStart(p);
   setDirty(true);
 }
 
@@ -812,6 +838,7 @@ function escapeHtml(value){
     .replace(/'/g, '&#39;');
 }
 
+document.getElementById('editorText').addEventListener('keydown', handleEditorKeydown);
 init();
 </script>
 </body>
