@@ -2330,6 +2330,10 @@ function handleSliderImageUpload(event, isFullscreen) {
 .editor-box-strong{border:1px solid #e7b0c7;background:#fff1f7;}
 .editor-box-tip{border:1px solid #b9ddff;background:#eef7ff;}
 .editor-box-warn{border:1px solid #ffd0a8;background:#fff6ed;}
+.box-strong,.box-tip,.box-warn{padding:12px 14px;border-radius:12px;margin:10px 0;}
+.box-strong{border:1px solid #e7b0c7;background:#fff1f7;}
+.box-tip{border:1px solid #b9ddff;background:#eef7ff;}
+.box-warn{border:1px solid #ffd0a8;background:#fff6ed;}
 </style>
 
 
@@ -3295,16 +3299,35 @@ function handleSliderImageUpload(event, isFullscreen) {
     });
     if(!valid.length) return '';
     return '<div class="recommend-area"><div class="recommend-title">💡 추천 제안</div><div class="keyword-list content-keyword-list">' + valid.map(function(item){
-      return '<button type="button" class="recommend-link-btn" onclick="window.handleRecommendationLink(' + JSON.stringify(String(item.link_type || '')) + ',' + JSON.stringify(String(item.link_value || '')) + ',' + (item.target_content_id == null ? 'null' : Number(item.target_content_id)) + ')">' + esc(item.title || '이동') + '</button>';
+      return '<button type="button" class="recommend-link-btn js-recommend-btn" data-link-type="' + esc(String(item.link_type || '')) + '" data-link-value="' + esc(String(item.link_value || '')) + '" data-target-content-id="' + (item.target_content_id == null ? '' : Number(item.target_content_id)) + '">' + esc(item.title || '이동') + '</button>';
     }).join('') + '</div></div>';
   }
   function renderVideos(items){
     const valid = (items || []).filter(function(item){ return !!String(item.video_url || '').trim(); });
     if(!valid.length) return '';
     return '<div class="video-area"><div class="video-title">📺 참고 동영상</div><div class="keyword-list content-keyword-list">' + valid.map(function(item){
-      return '<button type="button" class="video-link-btn" onclick="window.openVideoModalV2(' + JSON.stringify(String(item.title || '참고 동영상')) + ',' + JSON.stringify(String(item.video_url || '')) + ')">' + esc(item.title || '영상 보기') + '</button>';
+      return '<button type="button" class="video-link-btn js-video-btn" data-video-title="' + esc(String(item.title || '참고 동영상')) + '" data-video-url="' + esc(String(item.video_url || '')) + '">' + esc(item.title || '영상 보기') + '</button>';
     }).join('') + '</div></div>';
   }
+  document.addEventListener('click', function(e){
+    const recBtn = e.target.closest('.js-recommend-btn');
+    if(recBtn){
+      e.preventDefault();
+      const linkType = recBtn.dataset.linkType || '';
+      const linkValue = recBtn.dataset.linkValue || '';
+      const rawTarget = recBtn.dataset.targetContentId || '';
+      const targetContentId = rawTarget ? Number(rawTarget) : null;
+      window.handleRecommendationLink(linkType, linkValue, targetContentId);
+      return;
+    }
+    const videoBtn = e.target.closest('.js-video-btn');
+    if(videoBtn){
+      e.preventDefault();
+      const title = videoBtn.dataset.videoTitle || '참고 동영상';
+      const url = videoBtn.dataset.videoUrl || '';
+      window.openVideoModalV2(title, url);
+    }
+  });
   var originalOpenContent = window.openContent;
   window.openContent = async function(subcategoryId, title){
     window.currentEduSubcategoryId = subcategoryId;
