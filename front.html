@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta id="viewport-meta" name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>유림텔레콤 Class</title>
+    <title>유림텔레콤 Class - Front</title>
     <style>
         /* 기본 초기화 */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Pretendard', 'Malgun Gothic', sans-serif; }
@@ -193,8 +193,25 @@
         .admin-table th, .admin-table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
         .admin-table th { background: #f8f9fa; color: #555; }
     </style>
+
+<script>
+(function(){
+  try {
+    if (new URLSearchParams(location.search).get('open_content_id')) {
+      document.documentElement.classList.add('route-direct-content');
+    }
+  } catch(e) {}
+})();
+</script>
+<style>
+html.route-direct-content body{visibility:hidden;}
+html.route-direct-content body.route-ready{visibility:visible;}
+.page{animation:none !important;}
+.accordion.open .sub-item,.page.active .img-card-btn{animation:none !important;opacity:1 !important;transform:none !important;}
+</style>
+
 </head>
-<body>
+<body class="admin-mode">
 </div>
 
     <div id="page-home" class="page active container">
@@ -204,7 +221,7 @@
                 <div class="header-user-profile" onclick="handleProfileClick()">
                     <span id="logged-user-name">이주석</span> 님
                 </div>
-                <button class="btn-sm btn-outline" style="padding: 6px 10px; font-size:12px; border-radius:20px; cursor:pointer;" onclick="doLogout()">로그아웃</button>
+                
             </div>
         </header>
 
@@ -694,7 +711,7 @@
         window.onload = function() {
             isAdmin = false;
             document.body.classList.remove('admin-mode');
-            currentUserName = "교육 사용자";
+            currentUserName = "사용자";
             updateUserNameUI();
             syncNoticesToHome();
             updateStoreDropdowns();
@@ -772,9 +789,9 @@
         }
 
         function doAdminLogin() {
-            isAdmin = false;
-            document.body.classList.remove('admin-mode');
-            currentUserName = "교육 사용자";
+            isAdmin = true;
+            document.body.classList.add('admin-mode');
+            currentUserName = "관리자";
             updateUserNameUI();
             goHome();
         }
@@ -1779,27 +1796,95 @@
             if (sub?.category_id) await loadEduSubcategories(sub.category_id);
         }
 
-        async function deleteSubCategory(subcategoryId) {
-            if (!confirm('이 소분류를 삭제하시겠습니까?')) return;
+        function getStorageInfoFromPublicUrl(url) {
+            if (!url) return null;
+            const marker = '/storage/v1/object/public/';
+            const idx = url.indexOf(marker);
+            if (idx === -1) return null;
+            const fullPath = url.substring(idx + marker.length);
+            const firstSlash = fullPath.indexOf('/');
+            if (firstSlash === -1) return null;
+            return {
+                bucket: fullPath.substring(0, firstSlash),
+                filePath: fullPath.substring(firstSlash + 1)
+            };
+        }
 
-            const { data: sub } = await supabaseClient
-                .from('edu_subcategories')
-                .select('category_id')
-                .eq('id', subcategoryId)
-                .single();
+        async function cleanupContentImagesFromStorage(contentIds) {
+            if (!Array.isArray(contentIds) || !contentIds.length) return;
 
-            const { error } = await supabaseClient
-                .from('edu_subcategories')
-                .delete()
-                .eq('id', subcategoryId);
+            const { data: images, error } = await supabaseClient
+                .from('edu_content_images')
+                .select('id, image_url')
+                .in('content_id', contentIds);
 
             if (error) {
                 console.error(error);
-                alert('소분류 삭제 실패');
-                return;
+                throw new Error('이미지 정보를 불러오지 못했습니다.');
             }
 
-            if (sub?.category_id) await loadEduSubcategories(sub.category_id);
+            const grouped = {};
+            (images || []).forEach((img) => {
+                const info = getStorageInfoFromPublicUrl(img.image_url || '');
+                if (!info || !info.bucket || !info.filePath) return;
+                if (!grouped[info.bucket]) grouped[info.bucket] = [];
+                grouped[info.bucket].push(info.filePath);
+            });
+
+            for (const bucket of Object.keys(grouped)) {
+                const uniquePaths = Array.from(new Set(grouped[bucket]));
+                if (!uniquePaths.length) continue;
+                const { error: removeError } = await supabaseClient.storage.from(bucket).remove(uniquePaths);
+                if (removeError) {
+                    console.error(removeError);
+                    throw new Error('스토리지 이미지 삭제 실패');
+                }
+            }
+        }
+
+        async function deleteSubCategory(subcategoryId) {
+            if (!confirm('이 소분류를 삭제하시겠습니까?\n하위 content와 연결된 이미지 파일도 함께 삭제됩니다.')) return;
+
+            try {
+                const { data: sub, error: subError } = await supabaseClient
+                    .from('edu_subcategories')
+                    .select('category_id')
+                    .eq('id', subcategoryId)
+                    .single();
+
+                if (subError) throw subError;
+
+                const { data: contents, error: contentFetchError } = await supabaseClient
+                    .from('edu_contents')
+                    .select('id')
+                    .eq('subcategory_id', subcategoryId);
+
+                if (contentFetchError) throw contentFetchError;
+
+                const contentIds = (contents || []).map(row => row.id).filter(Boolean);
+                await cleanupContentImagesFromStorage(contentIds);
+
+                if (contentIds.length) {
+                    const { error: contentDeleteError } = await supabaseClient
+                        .from('edu_contents')
+                        .delete()
+                        .in('id', contentIds);
+
+                    if (contentDeleteError) throw contentDeleteError;
+                }
+
+                const { error: subDeleteError } = await supabaseClient
+                    .from('edu_subcategories')
+                    .delete()
+                    .eq('id', subcategoryId);
+
+                if (subDeleteError) throw subDeleteError;
+
+                if (sub?.category_id) await loadEduSubcategories(sub.category_id);
+            } catch (error) {
+                console.error(error);
+                alert(error?.message || '소분류 삭제 실패');
+            }
         }
 
         async function openContent(subcategoryId, title) {
@@ -1886,7 +1971,7 @@
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, -1)">↑</button>
                         <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
-                        <button class="btn-admin del" data-url="${encodeURIComponent(img.image_url || '')}" onclick="deleteContentImage(${img.id}, decodeURIComponent(this.dataset.url || ''))">삭제</button>
+                        <button class="btn-admin del" data-url="${img.image_url}" onclick="deleteContentImage(${img.id}, this.dataset.url)">삭제</button>
                     </div>
                 </div>
             `).join('');
@@ -2330,6 +2415,10 @@ function handleSliderImageUpload(event, isFullscreen) {
 .editor-box-strong{border:1px solid #e7b0c7;background:#fff1f7;}
 .editor-box-tip{border:1px solid #b9ddff;background:#eef7ff;}
 .editor-box-warn{border:1px solid #ffd0a8;background:#fff6ed;}
+.box-strong,.box-tip,.box-warn{padding:12px 14px;border-radius:12px;margin:10px 0;}
+.box-strong{border:1px solid #e7b0c7;background:#fff1f7;}
+.box-tip{border:1px solid #b9ddff;background:#eef7ff;}
+.box-warn{border:1px solid #ffd0a8;background:#fff6ed;}
 </style>
 
 
@@ -2566,170 +2655,11 @@ function handleSliderImageUpload(event, isFullscreen) {
     body.appendChild(addBtn);
   };
 
-  async function fetchContentRecommendations(contentId){
-    if(!contentId) return [];
-    const { data, error } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .select('*')
-      .eq('content_id', contentId)
-      .eq('is_visible', true)
-      .order('sort_order', { ascending:true })
-      .order('id', { ascending:true });
-
-    if(error){
-      console.error(error);
-      throw error;
-    }
-    return data || [];
-  }
-
-  function getRecommendationTypeLabel(linkType){
-    return linkType === 'internal' ? '내부링크' : '외부링크';
-  }
-
-  function getRecommendationPlaceholder(linkType){
-    return linkType === 'internal'
-      ? '예: content:34 / subcategory:12 / page-home'
-      : 'https://example.com';
-  }
-
-  function normalizeRecommendationLinkValue(linkType, rawValue){
-    const value = String(rawValue || '').trim();
-    if(linkType === 'external') return value;
-    if(!value) return '';
-    if(value.startsWith('#')) return value.slice(1);
-    return value;
-  }
-
-  function renderRecommendationButtons(items){
-    if(!items || !items.length) return '';
-    return `
-      <div class="recommend-area">
-        <div class="recommend-title">💡 추천 제안</div>
-        <div class="keyword-list content-keyword-list">
-          ${items.map(item => `
-            <button
-              type="button"
-              class="recommend-link-btn"
-              onclick='handleRecommendationLink(${JSON.stringify(item.link_type)}, ${JSON.stringify(item.link_value)})'
-            >${escapeHtml(item.title)}</button>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  }
-
-  function renderRecommendationManageList(items){
-    const wrap = document.getElementById('recommend-manage-list');
-    if(!wrap) return;
-
-    if(!items || !items.length){
-      wrap.innerHTML = '<div style="color:#888;">추천 제안이 없습니다.</div>';
-      return;
-    }
-
-    wrap.innerHTML = items.map(item => `
-      <div class="recommend-manage-item">
-        <div style="flex:1; min-width:0;">
-          <div style="font-size:13px; font-weight:700; margin-bottom:4px;">${escapeHtml(item.title)}</div>
-          <div style="font-size:12px; color:#777; margin-bottom:2px;">${getRecommendationTypeLabel(item.link_type)}</div>
-          <div style="font-size:12px; color:#999; word-break:break-all;">${escapeHtml(item.link_value)}</div>
-        </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="btn-admin edit" onclick="moveRecommendation(${item.id}, ${item.sort_order}, -1)">↑</button>
-          <button class="btn-admin edit" onclick="moveRecommendation(${item.id}, ${item.sort_order}, 1)">↓</button>
-          <button class="btn-admin edit" onclick="editRecommendation(${item.id})">수정</button>
-          <button class="btn-admin del" onclick="deleteRecommendation(${item.id})">삭제</button>
-        </div>
-      </div>
-    `).join('');
-  }
-
-  window.handleRecommendationLink = function(linkType, linkValue){
-    const value = String(linkValue || '').trim();
-    if(!value) return;
-
-    if(linkType === 'external'){
-      window.open(value, '_blank', 'noopener');
-      return;
-    }
-
-    if(value.startsWith('content:')){
-      const contentId = Number(value.split(':')[1]);
-      if(contentId) openContentById(contentId);
-      return;
-    }
-
-    if(value.startsWith('subcategory:')){
-      const subcategoryId = Number(value.split(':')[1]);
-      if(subcategoryId) openSubCategoryById(subcategoryId);
-      return;
-    }
-
-    const pageId = value.startsWith('#') ? value.slice(1) : value;
-    const pageEl = document.getElementById(pageId);
-    if(pageEl){
-      window.goToPage(pageId);
-      return;
-    }
-
-    alert('내부링크를 찾을 수 없습니다.\n' + value);
-  };
-
-  window.openContentById = async function(contentId){
-    try{
-      const { data, error } = await window.supabaseClient
-        .from('edu_contents')
-        .select('id, subcategory_id, title')
-        .eq('id', contentId)
-        .single();
-
-      if(error || !data){
-        console.error(error);
-        alert('콘텐츠를 찾을 수 없습니다.');
-        return;
-      }
-
-      await window.openContent(data.subcategory_id, data.title || document.getElementById('content-title')?.innerText || '콘텐츠');
-    }catch(e){
-      console.error(e);
-      alert('콘텐츠 이동 실패');
-    }
-  };
-
-  window.openSubCategoryById = async function(subcategoryId){
-    try{
-      const { data, error } = await window.supabaseClient
-        .from('edu_subcategories')
-        .select('id, name')
-        .eq('id', subcategoryId)
-        .single();
-
-      if(error || !data){
-        console.error(error);
-        alert('소분류를 찾을 수 없습니다.');
-        return;
-      }
-
-      await window.openContent(data.id, data.name || '콘텐츠');
-    }catch(e){
-      console.error(e);
-      alert('소분류 이동 실패');
-    }
-  };
-
-  window.loadContentRecommendations = async function(){
-    const items = await fetchContentRecommendations(window.currentEduContentId);
-    renderRecommendationManageList(items);
-    return items;
-  };
-
   window.openContent = async function(subcategoryId, title){
     window.currentEduSubcategoryId = subcategoryId;
     try{
       const content = await window.ensureEduContentRecord(subcategoryId, title);
       window.currentEduContentId = content.id;
-      const recommendations = await fetchContentRecommendations(content.id);
 
       const btn = document.querySelector('#page-content .btn-edit-content');
       if(btn){
@@ -2739,7 +2669,16 @@ function handleSliderImageUpload(event, isFullscreen) {
       }
       dirty = false;
 
-      const recommendHtml = renderRecommendationButtons(recommendations);
+      const recommends = parseRecommendJson(content.summary);
+      const recommendHtml = recommends.length ? `
+        <div class="recommend-area">
+          <div class="recommend-title">💡 추천 제안</div>
+          <div class="keyword-list content-keyword-list">
+            ${recommends.map(item => `<a class="recommend-link-btn" href="${item.url}" target="${getRecommendTarget(item.type)}">${item.title}</a>`).join('')}
+          </div>
+        </div>
+      ` : '';
+
       const viewHtml = `
         <div id="edu-content-view">
           <div id="edu-image-slider" style="margin-bottom:16px;"></div>
@@ -2790,10 +2729,11 @@ function handleSliderImageUpload(event, isFullscreen) {
       return;
     }
 
+    const recommends = parseRecommendJson(data?.summary);
     const imageItems = (images || []).map(img => `
       <div style="display:flex; align-items:center; gap:10px; padding:10px; border:1px solid #eee; border-radius:10px; margin-bottom:8px;">
         <img src="${img.image_url}" style="width:88px; height:88px; object-fit:cover; border-radius:8px; background:#f6f6f6;">
-        <div style="flex:1; min-width:0;">
+        <div style="flex:1;">
           <div style="font-size:12px; color:#666;">순서: ${img.sort_order}</div>
           <div style="font-size:12px; color:#999; word-break:break-all;">${img.image_url}</div>
         </div>
@@ -2802,6 +2742,17 @@ function handleSliderImageUpload(event, isFullscreen) {
           <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
           <button class="btn-admin del" onclick="deleteContentImage(${img.id}, ${JSON.stringify(img.image_url)})">삭제</button>
         </div>
+      </div>
+    `).join('');
+
+    const recommendItems = recommends.map((item, idx) => `
+      <div class="recommend-manage-item">
+        <div style="flex:1;">
+          <div style="font-size:13px; font-weight:700;">${item.title}</div>
+          <div style="font-size:12px; color:#777;">${item.type === 'internal' ? '내부링크' : '외부링크'} · ${item.url}</div>
+        </div>
+        <button class="btn-admin edit" onclick="editRecommendItem(${idx})">수정</button>
+        <button class="btn-admin del" onclick="deleteRecommendItem(${idx})">삭제</button>
       </div>
     `).join('');
 
@@ -2821,9 +2772,9 @@ function handleSliderImageUpload(event, isFullscreen) {
         <div style="margin-bottom:20px;">
           <div style="font-weight:700; margin-bottom:10px;">추천 제안</div>
           <div style="display:flex; gap:8px; margin-bottom:12px;">
-            <button class="btn-admin edit" onclick="addRecommendation()">+ 추가</button>
+            <button class="btn-admin edit" onclick="addRecommendItem()">+ 추가</button>
           </div>
-          <div id="recommend-manage-list"><div style="color:#888;">불러오는 중...</div></div>
+          <div id="recommend-manage-list" data-items='${stringifyRecommendJson(recommends)}'>${recommendItems || '<div style="color:#888;">추천 제안이 없습니다.</div>'}</div>
         </div>
 
         <div style="font-weight:700; margin-bottom:10px;">본문</div>
@@ -2854,16 +2805,17 @@ function handleSliderImageUpload(event, isFullscreen) {
     document.getElementById('page-content-dynamic-area').innerHTML = editorHtml;
     bindEditorDirtyTracking();
     dirty = false;
-    await window.loadContentRecommendations();
   };
 
   window.saveContent = async function(){
     const content = document.getElementById('editor-text')?.innerHTML || '';
+    const recommendRaw = document.getElementById('recommend-manage-list')?.dataset.items || '[]';
 
     const { error } = await window.supabaseClient
       .from('edu_contents')
       .update({
         content_html: content,
+        summary: recommendRaw,
         title: document.getElementById('content-title').innerText.trim()
       })
       .eq('id', window.currentEduContentId);
@@ -2886,208 +2838,59 @@ function handleSliderImageUpload(event, isFullscreen) {
     await window.openContent(window.currentEduSubcategoryId, document.getElementById('content-title').innerText);
   };
 
-  window.addRecommendation = async function(){
-    if(!window.currentEduContentId){
-      alert('콘텐츠를 먼저 선택하세요.');
-      return;
-    }
+  window.getCurrentRecommendItems = function(){
+    const container = document.getElementById('recommend-manage-list');
+    if(!container) return [];
+    try{ return JSON.parse(container.dataset.items || '[]'); }catch(e){ return []; }
+  };
 
-    const title = prompt('추천제안 제목을 입력하세요.');
-    if(!title || !title.trim()) return;
-
-    const linkTypeInput = prompt('링크 타입을 입력하세요.\nexternal / internal', 'external');
-    if(!linkTypeInput) return;
-
-    const linkType = linkTypeInput.trim().toLowerCase();
-    if(!['external', 'internal'].includes(linkType)){
-      alert('링크 타입은 external 또는 internal만 가능합니다.');
-      return;
-    }
-
-    const linkValueInput = prompt(`링크 값을 입력하세요.\n${getRecommendationPlaceholder(linkType)}`, linkType === 'external' ? 'https://' : '');
-    if(!linkValueInput || !linkValueInput.trim()) return;
-
-    const linkValue = normalizeRecommendationLinkValue(linkType, linkValueInput);
-    if(!linkValue){
-      alert('링크 값을 입력하세요.');
-      return;
-    }
-
-    const { data: lastRow, error: lastError } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .select('sort_order')
-      .eq('content_id', window.currentEduContentId)
-      .order('sort_order', { ascending:false })
-      .limit(1)
-      .maybeSingle();
-
-    if(lastError){
-      console.error(lastError);
-      alert('추천제안 순서 조회 실패');
-      return;
-    }
-
-    const nextSort = (lastRow?.sort_order || 0) + 1;
-    const { error } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .insert([{
-        content_id: window.currentEduContentId,
-        title: title.trim(),
-        link_type: linkType,
-        link_value: linkValue,
-        sort_order: nextSort,
-        is_visible: true
-      }]);
-
-    if(error){
-      console.error(error);
-      alert('추천제안 추가 실패');
-      return;
-    }
-
-    await window.loadContentRecommendations();
+  window.setCurrentRecommendItems = function(items){
+    const container = document.getElementById('recommend-manage-list');
+    if(!container) return;
+    container.dataset.items = JSON.stringify(items || []);
+    container.innerHTML = (items || []).length ? items.map((item, idx) => `
+      <div class="recommend-manage-item">
+        <div style="flex:1;">
+          <div style="font-size:13px; font-weight:700;">${item.title}</div>
+          <div style="font-size:12px; color:#777;">${item.type === 'internal' ? '내부링크' : '외부링크'} · ${item.url}</div>
+        </div>
+        <button class="btn-admin edit" onclick="editRecommendItem(${idx})">수정</button>
+        <button class="btn-admin del" onclick="deleteRecommendItem(${idx})">삭제</button>
+      </div>
+    `).join('') : '<div style="color:#888;">추천 제안이 없습니다.</div>';
     markDirty();
   };
 
-  window.editRecommendation = async function(recommendationId){
-    const { data, error } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .select('*')
-      .eq('id', recommendationId)
-      .single();
-
-    if(error || !data){
-      console.error(error);
-      alert('추천제안 정보를 불러오지 못했습니다.');
-      return;
-    }
-
-    const title = prompt('추천제안 제목을 수정하세요.', data.title);
-    if(!title || !title.trim()) return;
-
-    const linkTypeInput = prompt('링크 타입을 수정하세요.\nexternal / internal', data.link_type);
-    if(!linkTypeInput) return;
-
-    const linkType = linkTypeInput.trim().toLowerCase();
-    if(!['external', 'internal'].includes(linkType)){
-      alert('링크 타입은 external 또는 internal만 가능합니다.');
-      return;
-    }
-
-    const linkValueInput = prompt(`링크 값을 수정하세요.\n${getRecommendationPlaceholder(linkType)}`, data.link_value);
-    if(!linkValueInput || !linkValueInput.trim()) return;
-
-    const linkValue = normalizeRecommendationLinkValue(linkType, linkValueInput);
-    if(!linkValue){
-      alert('링크 값을 입력하세요.');
-      return;
-    }
-
-    const { error:updateError } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .update({
-        title: title.trim(),
-        link_type: linkType,
-        link_value: linkValue
-      })
-      .eq('id', recommendationId);
-
-    if(updateError){
-      console.error(updateError);
-      alert('추천제안 수정 실패');
-      return;
-    }
-
-    await window.loadContentRecommendations();
-    markDirty();
+  window.addRecommendItem = function(){
+    const title = prompt('버튼 이름을 입력하세요.');
+    if(!title) return;
+    const urlInput = prompt('링크를 입력하세요.\n- 외부링크: https://example.com\n- 내부링크: #page-home 또는 page-home');
+    if(!urlInput) return;
+    const raw = urlInput.trim();
+    const type = /^https?:\/\//i.test(raw) ? 'external' : 'internal';
+    const items = window.getCurrentRecommendItems();
+    items.push({ title:title.trim(), type, url:normalizeUrlByType(type, raw) });
+    window.setCurrentRecommendItems(items);
   };
 
-  window.deleteRecommendation = async function(recommendationId){
-    if(!confirm('이 추천제안을 삭제하시겠습니까?')) return;
-
-    const { error } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .delete()
-      .eq('id', recommendationId);
-
-    if(error){
-      console.error(error);
-      alert('추천제안 삭제 실패');
-      return;
-    }
-
-    await window.normalizeRecommendationSortOrder();
-    await window.loadContentRecommendations();
-    markDirty();
+  window.editRecommendItem = function(index){
+    const items = window.getCurrentRecommendItems();
+    const item = items[index];
+    if(!item) return;
+    const title = prompt('버튼 이름을 수정하세요.', item.title);
+    if(!title) return;
+    const urlInput = prompt('링크를 수정하세요.\n- 외부링크: https://example.com\n- 내부링크: #page-home 또는 page-home', item.url);
+    if(!urlInput) return;
+    const raw = urlInput.trim();
+    const type = /^https?:\/\//i.test(raw) ? 'external' : 'internal';
+    items[index] = { title:title.trim(), type, url:normalizeUrlByType(type, raw) };
+    window.setCurrentRecommendItems(items);
   };
 
-  window.moveRecommendation = async function(recommendationId, sortOrder, direction){
-    if(!window.currentEduContentId) return;
-
-    const targetSort = sortOrder + direction;
-    if(targetSort < 1) return;
-
-    const { data: neighbor, error: neighborError } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .select('*')
-      .eq('content_id', window.currentEduContentId)
-      .eq('sort_order', targetSort)
-      .maybeSingle();
-
-    if(neighborError){
-      console.error(neighborError);
-      alert('순서 변경 대상 조회 실패');
-      return;
-    }
-
-    if(!neighbor) return;
-
-    const { error:e1 } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .update({ sort_order: -9999 })
-      .eq('id', recommendationId);
-    if(e1){ console.error(e1); alert('순서 변경 실패'); return; }
-
-    const { error:e2 } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .update({ sort_order: sortOrder })
-      .eq('id', neighbor.id);
-    if(e2){ console.error(e2); alert('순서 변경 실패'); return; }
-
-    const { error:e3 } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .update({ sort_order: targetSort })
-      .eq('id', recommendationId);
-    if(e3){ console.error(e3); alert('순서 변경 실패'); return; }
-
-    await window.loadContentRecommendations();
-    markDirty();
-  };
-
-  window.normalizeRecommendationSortOrder = async function(){
-    if(!window.currentEduContentId) return;
-
-    const { data, error } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .select('id, sort_order')
-      .eq('content_id', window.currentEduContentId)
-      .order('sort_order', { ascending:true })
-      .order('id', { ascending:true });
-
-    if(error || !data){
-      console.error(error);
-      return;
-    }
-
-    for(let i=0;i<data.length;i++){
-      const nextOrder = i + 1;
-      if(data[i].sort_order !== nextOrder){
-        await window.supabaseClient
-          .from('edu_content_recommendations')
-          .update({ sort_order: nextOrder })
-          .eq('id', data[i].id);
-      }
-    }
+  window.deleteRecommendItem = function(index){
+    const items = window.getCurrentRecommendItems();
+    items.splice(index, 1);
+    window.setCurrentRecommendItems(items);
   };
 
   async function resizeImageFile(file, maxWidth = 1600, quality = 0.9){
@@ -3335,30 +3138,40 @@ function handleSliderImageUpload(event, isFullscreen) {
     });
   }
 
+  window.closeZoomModal = function(){
+    const existing = document.getElementById('fullscreen-slider-overlay');
+    if(existing) existing.remove();
+    document.body.style.overflow = '';
+  };
+
   window.openZoomModal = function(startIndex){
     const data = window._sliderData || [];
     if(!data.length) return;
     window._sliderIndex = typeof startIndex === 'number' ? startIndex : (window._sliderIndex || 0);
 
+    window.closeZoomModal();
+    document.body.style.overflow = 'hidden';
+
     const overlay = document.createElement('div');
     overlay.id = 'fullscreen-slider-overlay';
-    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:99999; display:flex; align-items:center; justify-content:center; padding:20px;';
+    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:99999; display:flex; align-items:center; justify-content:center; padding:20px; overscroll-behavior:contain;';
     overlay.innerHTML = `
-      <button id="fullscreen-close-btn" style="position:absolute; top:18px; right:18px; width:40px; height:40px; border:none; border-radius:999px; background:rgba(255,255,255,.18); color:#fff; font-size:20px; cursor:pointer;">✕</button>
-      <div id="fullscreen-slider-surface" style="width:100%; max-width:1200px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+      <button id="fullscreen-close-btn" type="button" style="position:absolute; top:18px; right:18px; width:44px; height:44px; border:none; border-radius:999px; background:rgba(255,255,255,.18); color:#fff; font-size:22px; cursor:pointer; z-index:2;">✕</button>
+      <div id="fullscreen-slider-surface" style="width:100%; max-width:1200px; display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative; z-index:1;" onclick="event.stopPropagation()">
         <img id="fullscreen-slider-image" src="${data[window._sliderIndex].image_url}" style="max-width:100%; max-height:78vh; object-fit:contain; border-radius:12px;">
         <div id="fullscreen-slider-dots" style="display:flex; justify-content:center; gap:8px; margin-top:16px;">
-          ${data.map((_, idx) => `<span class="content-page-dot${idx === window._sliderIndex ? ' active' : ''}" onclick="setFullscreenContentImagePage(${idx})"></span>`).join('')}
+          ${data.map((_, idx) => `<span class="content-page-dot${idx === window._sliderIndex ? ' active' : ''}" onclick="event.stopPropagation(); setFullscreenContentImagePage(${idx})"></span>`).join('')}
         </div>
       </div>
     `;
     document.body.appendChild(overlay);
 
     const closeBtn = document.getElementById('fullscreen-close-btn');
-    closeBtn.onclick = () => overlay.remove();
+    closeBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); window.closeZoomModal(); };
 
     overlay.addEventListener('click', (e) => {
-      if(e.target === overlay) overlay.remove();
+      e.preventDefault();
+      if(e.target === overlay) window.closeZoomModal();
     });
 
     let startX = 0, startY = 0, moved = false;
@@ -3387,15 +3200,11 @@ function handleSliderImageUpload(event, isFullscreen) {
         else if(touchX > rect.width * 0.7) nextFullscreenImage();
       }
     }, { passive:true });
-
-    surface.addEventListener('click', (e) => {
-      if(e.target.closest('#fullscreen-close-btn')) return;
-      const rect = surface.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      if(x < rect.width * 0.3) prevFullscreenImage();
-      else if(x > rect.width * 0.7) nextFullscreenImage();
-    });
   };
+
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') window.closeZoomModal();
+  });
 
   window.setFullscreenContentImagePage = function(index){
     const data = window._sliderData || [];
@@ -3421,2190 +3230,222 @@ function handleSliderImageUpload(event, isFullscreen) {
 </script>
 
 
-<style id="oai-admin-video-recommend-v2-style">
-.rec-modal-overlay,.video-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:12000;display:none;align-items:center;justify-content:center;padding:18px;}
-.rec-modal,.video-modal{width:100%;max-width:520px;background:#fff;border-radius:20px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.22);}
-.rec-modal-title,.video-modal-title{font-size:18px;font-weight:800;margin-bottom:14px;color:#111;}
-.rec-form-group{margin-bottom:14px;}
-.rec-form-label{display:block;font-size:13px;font-weight:700;color:#333;margin-bottom:8px;}
-.rec-form-input{width:100%;padding:13px 14px;border:1px solid #ddd;border-radius:12px;font-size:14px;outline:none;background:#fff;}
-.rec-form-input:focus{border-color:var(--uplus-magenta);}
-.rec-type-row{display:flex;gap:10px;flex-wrap:wrap;}
-.rec-type-pill{flex:1;min-width:120px;border:1px solid #ddd;border-radius:14px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px;font-weight:700;background:#fff;transition:.18s ease;}
-.rec-type-pill.active{border-color:var(--uplus-magenta);background:#fff0f7;color:var(--uplus-magenta);}
-.rec-type-pill input{display:none;}
-.rec-form-help{font-size:12px;color:#777;line-height:1.5;margin-top:6px;}
-.rec-hidden{display:none !important;}
-.slider-hit-left,.slider-hit-right,.slider-hit-center{position:absolute;top:12px;bottom:44px;z-index:2;}
-.slider-hit-left{left:12px;width:22%;}
-.slider-hit-right{right:12px;width:22%;}
-.slider-hit-center{left:22%;right:22%;cursor:zoom-in;}
-.fullscreen-hit-left,.fullscreen-hit-right,.fullscreen-hit-center{position:absolute;top:0;bottom:42px;z-index:2;}
-.fullscreen-hit-left{left:0;width:22%;}
-.fullscreen-hit-right{right:0;width:22%;}
-.fullscreen-hit-center{left:22%;right:22%;}
-body.modal-open{overflow:hidden; touch-action:none;}
-.rec-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
-.content-video-box{margin-top:20px;padding:14px;border:1px solid #f0d1e0;background:#fff8fb;border-radius:14px;}
-.content-video-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;border:1px solid #e5bfd0;border-radius:12px;padding:14px 16px;cursor:pointer;font-size:14px;font-weight:700;color:#333;}
-.content-video-trigger:hover{border-color:var(--uplus-magenta);color:var(--uplus-magenta);}
-.content-video-sub{font-size:12px;color:#666;margin-top:8px;line-height:1.5;}
-.video-preview-btn{white-space:nowrap;}
-.video-embed-wrap{position:relative;width:100%;padding-top:56.25%;background:#000;border-radius:14px;overflow:hidden;}
-.video-embed-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
-.video-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
-.video-close-btn{border:none;background:#f3f4f8;border-radius:10px;padding:8px 10px;cursor:pointer;font-weight:700;}
+<style id="editor-link-patch-style">
+.editor-link-hint{font-size:12px;color:#666;margin-top:6px;}
 </style>
-
-<div id="recommendation-modal-overlay" class="rec-modal-overlay" onclick="if(event.target===this) closeRecommendationModal()">
-  <div class="rec-modal" onclick="event.stopPropagation()">
-    <div class="rec-modal-title" id="recommendation-modal-title">추천제안 추가</div>
-    <input type="hidden" id="recommendation-modal-id">
-    <div class="rec-form-group">
-      <label class="rec-form-label" for="recommendation-modal-text">버튼 제목</label>
-      <input id="recommendation-modal-text" class="rec-form-input" type="text" placeholder="예: 요금제 비교 보기">
-    </div>
-    <div class="rec-form-group">
-      <div class="rec-form-label">링크 유형</div>
-      <div class="rec-type-row">
-        <label class="rec-type-pill active" id="recommend-pill-external">
-          <input type="radio" name="recommendation-link-type" value="external" checked>
-          외부 링크
-        </label>
-        <label class="rec-type-pill" id="recommend-pill-internal">
-          <input type="radio" name="recommendation-link-type" value="internal">
-          내부 콘텐츠
-        </label>
-      </div>
-    </div>
-
-    <div class="rec-form-group" id="recommendation-external-group">
-      <label class="rec-form-label" for="recommendation-modal-link">외부 링크 주소</label>
-      <input id="recommendation-modal-link" class="rec-form-input" type="text" placeholder="https://example.com">
-      <div id="recommendation-modal-help" class="rec-form-help">외부 링크는 https://를 포함한 전체 주소를 입력하면 된다.</div>
-    </div>
-
-    <div class="rec-form-group rec-hidden" id="recommendation-internal-group">
-      <label class="rec-form-label" for="recommendation-modal-target-content">연결할 콘텐츠</label>
-      <select id="recommendation-modal-target-content" class="rec-form-input">
-        <option value="">콘텐츠를 선택하세요</option>
-      </select>
-      <div class="rec-form-help">다른 content를 선택하면 해당 내용으로 바로 이동한다.</div>
-    </div>
-
-    <div class="rec-modal-actions">
-      <button class="btn-admin del" type="button" onclick="closeRecommendationModal()">취소</button>
-      <button class="btn-admin edit" type="button" onclick="saveRecommendationModal()">저장</button>
-    </div>
-  </div>
-</div>
-
-<div id="content-video-form-modal" class="rec-modal-overlay" onclick="if(event.target===this) closeContentVideoModal()" style="display:none;">
-  <div class="rec-modal" onclick="event.stopPropagation()">
-    <div class="rec-modal-title" id="content-video-modal-title">참고 동영상 추가</div>
-    <input type="hidden" id="content-video-modal-id">
-    <div class="rec-form-group">
-      <label class="rec-form-label" for="content-video-modal-text">버튼 제목</label>
-      <input id="content-video-modal-text" class="rec-form-input" type="text" placeholder="예: 개통 설명 영상 보기">
-    </div>
-    <div class="rec-form-group">
-      <label class="rec-form-label" for="content-video-modal-link">유튜브 링크</label>
-      <input id="content-video-modal-link" class="rec-form-input" type="text" placeholder="https://youtu.be/... 또는 https://www.youtube.com/watch?v=...">
-      <div class="rec-form-help">watch / youtu.be / shorts 링크 모두 가능하다. 저장 시 자동으로 재생 버튼에서 사용된다.</div>
-    </div>
-    <div class="rec-modal-actions">
-      <button class="btn-admin del" type="button" onclick="closeContentVideoModal()">취소</button>
-      <button class="btn-admin edit" type="button" onclick="saveContentVideoModal()">저장</button>
-    </div>
-  </div>
-</div>
-
-<div id="youtube-video-modal" class="video-modal-overlay" onclick="if(event.target===this) closeYoutubeVideoModal()">
-  <div class="video-modal" onclick="event.stopPropagation()">
-    <div class="video-modal-head">
-      <div class="video-modal-title" id="youtube-video-modal-title">참고 동영상</div>
-      <button class="video-close-btn" type="button" onclick="closeYoutubeVideoModal()">닫기</button>
-    </div>
-    <div class="video-embed-wrap">
-      <iframe id="youtube-video-modal-iframe" src="" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
-    </div>
-  </div>
-</div>
-</div>
-
-<script id="oai-admin-video-recommend-v3-script">
+<script id="editor-link-patch-script">
 (function(){
-  function esc(str=''){
-    return String(str)
-      .replaceAll('&','&amp;')
-      .replaceAll('<','&lt;')
-      .replaceAll('>','&gt;')
-      .replaceAll('"','&quot;')
-      .replaceAll("'",'&#039;');
+  function goEditor(){
+    var id = window.currentEduContentId || (typeof currentEduContentId !== 'undefined' ? currentEduContentId : null);
+    if(!id){
+      alert('편집할 content를 먼저 선택하세요.');
+      return;
+    }
+    location.href = 'editor.html?content_id=' + encodeURIComponent(id);
   }
 
-  function setDirty(flag=true){
-    window.eduContentDirty = !!flag;
-  }
-  window.onbeforeunload = function(){
-    if(window.eduContentDirty) return '저장되지 않은 변경사항이 있습니다.';
+  var oldToggle = window.toggleContentEdit;
+  window.toggleContentEdit = function(pageId){
+    if(pageId === 'page-content'){
+      goEditor();
+      return;
+    }
+    if(typeof oldToggle === 'function'){
+      return oldToggle.apply(this, arguments);
+    }
   };
 
-  let contentOptionsCache = null;
-  let contentTitleMap = {};
+  window.openContentEditor = goEditor;
 
-  function readSummaryMeta(summaryValue){
-    if(!summaryValue) return {};
-    try{
-      const parsed = JSON.parse(summaryValue);
-      if(parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
-      return {};
-    }catch(e){
-      return {};
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest('.btn-edit-content');
+    if(!btn) return;
+    var page = btn.closest('.page');
+    if(page && page.id === 'page-content'){
+      e.preventDefault();
+      e.stopPropagation();
+      goEditor();
     }
-  }
+  }, true);
 
-  function buildSummaryMeta(videoTitle, videoUrl){
-    const base = (window.currentContentMeta && typeof window.currentContentMeta === 'object' && !Array.isArray(window.currentContentMeta))
-      ? { ...window.currentContentMeta }
-      : {};
-    const cleanTitle = String(videoTitle || '').trim();
-    const cleanUrl = String(videoUrl || '').trim();
-    if(cleanTitle || cleanUrl){
-      base.video = { title: cleanTitle, youtube_url: cleanUrl };
-    } else {
-      delete base.video;
-    }
-    return Object.keys(base).length ? JSON.stringify(base) : null;
-  }
-
-  function getVideoMeta(summaryValue){
-    const parsed = readSummaryMeta(summaryValue);
-    const video = parsed.video && typeof parsed.video === 'object' ? parsed.video : {};
-    return {
-      title: String(video.title || '').trim(),
-      youtube_url: String(video.youtube_url || '').trim()
-    };
-  }
-
-  async function fetchContentOptions(force=false){
-    if(contentOptionsCache && !force) return contentOptionsCache;
-    const { data, error } = await window.supabaseClient
-      .from('edu_contents')
-      .select('id, title, subcategory_id')
-      .order('id', { ascending:true });
-    if(error){
-      console.error(error);
-      throw error;
-    }
-    contentOptionsCache = (data || []).map(item => ({
-      id: item.id,
-      title: String(item.title || `콘텐츠 ${item.id}`).trim() || `콘텐츠 ${item.id}`,
-      subcategory_id: item.subcategory_id
-    }));
-    contentTitleMap = {};
-    contentOptionsCache.forEach(item => { contentTitleMap[item.id] = item.title; });
-    return contentOptionsCache;
-  }
-
-  async function fetchContentRecommendations(contentId){
-    if(!contentId) return [];
-    const { data, error } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .select('id, content_id, title, link_type, link_value, target_content_id, sort_order, is_visible')
-      .eq('content_id', contentId)
-      .eq('is_visible', true)
-      .order('sort_order', { ascending:true })
-      .order('id', { ascending:true });
-
-    if(error){
-      console.error(error);
-      return [];
-    }
-
-    await fetchContentOptions();
-    return (data || []).map(item => ({
-      ...item,
-      target_content_title: item.target_content_id ? (contentTitleMap[item.target_content_id] || `콘텐츠 ${item.target_content_id}`) : ''
-    }));
-  }
-
-  function renderRecommendationButtons(items){
-    if(!items || !items.length) return '';
-    return `
-      <div class="recommend-area">
-        <div class="recommend-title">💡 추천 제안</div>
-        <div class="keyword-list content-keyword-list">
-          ${items.map(item => `
-            <button
-              type="button"
-              class="recommend-link-btn"
-              onclick="handleRecommendationLink('${String(item.link_type || '').replace(/'/g, "\'")}', '${String(item.link_value || '').replace(/'/g, "\'")}', ${item.target_content_id || 'null'})"
-            >${esc(item.title)}</button>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  }
-
-  function extractYoutubeId(url=''){
-    const value = String(url || '').trim();
-    if(!value) return '';
-    if(/^[a-zA-Z0-9_-]{11}$/.test(value)) return value;
-    try{
-      const u = new URL(value);
-      if(u.hostname.includes('youtu.be')) return u.pathname.replace('/','').slice(0, 11);
-      if(u.searchParams.get('v')) return u.searchParams.get('v').slice(0, 11);
-      const parts = u.pathname.split('/').filter(Boolean);
-      const idx = parts.findIndex(p => ['embed', 'shorts', 'live'].includes(p));
-      if(idx !== -1 && parts[idx + 1]) return parts[idx + 1].slice(0, 11);
-      return '';
-    }catch(e){
-      const match = value.match(/([a-zA-Z0-9_-]{11})/);
-      return match ? match[1] : '';
-    }
-  }
-
-  function getYoutubeEmbedUrl(url, autoplay=true){
-    const videoId = extractYoutubeId(url);
-    if(!videoId) return '';
-    return `https://www.youtube.com/embed/${videoId}?autoplay=${autoplay ? 1 : 0}&rel=0&modestbranding=1&playsinline=1`;
-  }
-
-  function renderVideoSection(videoMeta){
-    if(!videoMeta || !videoMeta.youtube_url || !extractYoutubeId(videoMeta.youtube_url)) return '';
-    const title = videoMeta.title || '참고 동영상';
-    return `
-      <div class="content-video-box">
-        <div class="recommend-title">🎬 참고 동영상</div>
-        <button type="button" class="content-video-trigger" onclick="openYoutubeVideoModal('${String(title).replace(/'/g, "\'")}', '${String(videoMeta.youtube_url).replace(/'/g, "\'")}')">
-          <span>${esc(title)}</span>
-          <span>재생하기</span>
-        </button>
-        <div class="content-video-sub">버튼을 누르면 팝업창에서 유튜브 영상이 자동재생된다.</div>
-      </div>
-    `;
-  }
-
-  function updateRecommendationTypeUI(type){
-    const isInternal = type === 'internal';
-    document.querySelectorAll('input[name="recommendation-link-type"]').forEach(radio => {
-      radio.checked = radio.value === type;
-    });
-    document.getElementById('recommend-pill-external')?.classList.toggle('active', !isInternal);
-    document.getElementById('recommend-pill-internal')?.classList.toggle('active', isInternal);
-    document.getElementById('recommendation-external-group')?.classList.toggle('rec-hidden', isInternal);
-    document.getElementById('recommendation-internal-group')?.classList.toggle('rec-hidden', !isInternal);
-  }
-
-  function getSelectedRecommendationType(){
-    return document.querySelector('input[name="recommendation-link-type"]:checked')?.value || 'external';
-  }
-
-  async function populateRecommendationContentOptions(selectedId=null){
-    const select = document.getElementById('recommendation-modal-target-content');
-    if(!select) return;
-    const items = await fetchContentOptions();
-    const currentId = Number(window.currentEduContentId || 0);
-    const options = items
-      .filter(item => item.id !== currentId)
-      .map(item => `<option value="${item.id}" ${Number(selectedId) === Number(item.id) ? 'selected' : ''}>${esc(item.title)} (ID ${item.id})</option>`)
-      .join('');
-    select.innerHTML = `<option value="">콘텐츠를 선택하세요</option>${options}`;
-  }
-
-  document.addEventListener('change', function(e){
-    if(e.target && e.target.name === 'recommendation-link-type'){
-      updateRecommendationTypeUI(e.target.value);
+  document.addEventListener('DOMContentLoaded', function(){
+    var btn = document.querySelector('#page-content .btn-edit-content');
+    if(btn){
+      btn.textContent = 'editor에서 편집하기';
+      btn.title = 'editor.html에서 content를 편집합니다.';
     }
   });
-
-  window.openYoutubeVideoModal = function(title, url){
-    const embedUrl = getYoutubeEmbedUrl(url, true);
-    if(!embedUrl){
-      alert('유효한 유튜브 링크가 아닙니다.');
-      return;
-    }
-    const modal = document.getElementById('youtube-video-modal');
-    const frame = document.getElementById('youtube-video-modal-iframe');
-    const titleEl = document.getElementById('youtube-video-modal-title');
-    if(titleEl) titleEl.textContent = title || '참고 동영상';
-    if(frame) frame.src = embedUrl;
-    if(modal) modal.style.display = 'flex';
-    document.body.classList.add('modal-open');
-  };
-
-  window.closeYoutubeVideoModal = function(){
-    const modal = document.getElementById('youtube-video-modal');
-    const frame = document.getElementById('youtube-video-modal-iframe');
-    if(frame) frame.src = '';
-    if(modal) modal.style.display = 'none';
-    document.body.classList.remove('modal-open');
-  };
-
-  window.previewVideoInAdmin = function(){
-    const title = document.getElementById('content-video-title')?.value?.trim() || '참고 동영상';
-    const url = document.getElementById('content-video-url')?.value?.trim() || '';
-    if(!url){
-      alert('유튜브 링크를 먼저 입력하세요.');
-      return;
-    }
-    window.openYoutubeVideoModal(title, url);
-  };
-
-  window.renderRecommendationManageList = function(items){
-    const wrap = document.getElementById('recommend-manage-list');
-    if(!wrap) return;
-
-    if(!items || !items.length){
-      wrap.innerHTML = '<div style="color:#888;">추천 제안이 없습니다.</div>';
-      return;
-    }
-
-    wrap.innerHTML = items.map(item => `
-      <div class="recommend-manage-item">
-        <div style="flex:1; min-width:0;">
-          <div style="font-size:13px; font-weight:700; margin-bottom:4px;">${esc(item.title)}</div>
-          <div style="font-size:12px; color:#777; margin-bottom:2px;">${item.link_type === 'internal' ? '내부콘텐츠' : '외부링크'}</div>
-          <div style="font-size:12px; color:#999; word-break:break-all;">
-            ${item.link_type === 'internal'
-              ? esc(item.target_content_title || `콘텐츠 ID ${item.target_content_id || ''}`)
-              : esc(item.link_value || '')
-            }
-          </div>
-        </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="btn-admin edit" onclick="moveRecommendation(${item.id}, ${item.sort_order}, -1)">↑</button>
-          <button class="btn-admin edit" onclick="moveRecommendation(${item.id}, ${item.sort_order}, 1)">↓</button>
-          <button class="btn-admin edit" onclick="editRecommendation(${item.id})">수정</button>
-          <button class="btn-admin del" onclick="deleteRecommendation(${item.id})">삭제</button>
-        </div>
-      </div>
-    `).join('');
-  };
-
-  window.loadContentRecommendations = async function(){
-    const items = await fetchContentRecommendations(window.currentEduContentId);
-    window.renderRecommendationManageList(items);
-  };
-
-  window.openRecommendationModal = async function(mode='add', item=null){
-    const overlay = document.getElementById('recommendation-modal-overlay');
-    document.getElementById('recommendation-modal-title').textContent = mode === 'edit' ? '추천제안 수정' : '추천제안 추가';
-    document.getElementById('recommendation-modal-id').value = item?.id || '';
-    document.getElementById('recommendation-modal-text').value = item?.title || '';
-    document.getElementById('recommendation-modal-link').value = item?.link_value || '';
-    await populateRecommendationContentOptions(item?.target_content_id || null);
-    updateRecommendationTypeUI(item?.link_type || 'external');
-    const targetSelect = document.getElementById('recommendation-modal-target-content');
-    if(targetSelect) targetSelect.value = item?.target_content_id || '';
-    if(overlay) overlay.style.display = 'flex';
-    setTimeout(() => document.getElementById('recommendation-modal-text')?.focus(), 20);
-  };
-
-  window.closeRecommendationModal = function(){
-    const overlay = document.getElementById('recommendation-modal-overlay');
-    if(overlay) overlay.style.display = 'none';
-  };
-
-  window.addRecommendation = async function(){
-    if(!window.currentEduContentId){
-      alert('콘텐츠를 먼저 선택하세요.');
-      return;
-    }
-    await window.openRecommendationModal('add');
-  };
-
-  window.editRecommendation = async function(recommendationId){
-    const { data, error } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .select('id, title, link_type, link_value, target_content_id')
-      .eq('id', recommendationId)
-      .single();
-
-    if(error || !data){
-      console.error(error);
-      alert('추천제안 정보를 불러오지 못했습니다.');
-      return;
-    }
-
-    await window.openRecommendationModal('edit', data);
-  };
-
-  window.saveRecommendationModal = async function(){
-    if(!window.currentEduContentId){
-      alert('콘텐츠를 먼저 선택하세요.');
-      return;
-    }
-
-    const id = document.getElementById('recommendation-modal-id').value;
-    const title = document.getElementById('recommendation-modal-text').value.trim();
-    const linkType = getSelectedRecommendationType();
-    const linkValueInput = document.getElementById('recommendation-modal-link').value.trim();
-    const targetContentId = Number(document.getElementById('recommendation-modal-target-content').value || 0);
-
-    if(!title){
-      alert('버튼 제목을 입력하세요.');
-      return;
-    }
-
-    if(linkType === 'external' && !linkValueInput){
-      alert('외부 링크 주소를 입력하세요.');
-      return;
-    }
-
-    if(linkType === 'external' && !/^https?:\/\//i.test(linkValueInput)){
-      alert('외부 링크는 http:// 또는 https:// 로 시작해야 합니다.');
-      return;
-    }
-
-    if(linkType === 'internal' && !targetContentId){
-      alert('연결할 콘텐츠를 선택하세요.');
-      return;
-    }
-
-    const payload = {
-      content_id: window.currentEduContentId,
-      title,
-      link_type: linkType,
-      link_value: linkType === 'external' ? linkValueInput : '',
-      target_content_id: linkType === 'internal' ? targetContentId : null,
-      is_visible: true
-    };
-
-    if(!id){
-      const { data: lastRow, error: lastError } = await window.supabaseClient
-        .from('edu_content_recommendations')
-        .select('sort_order')
-        .eq('content_id', window.currentEduContentId)
-        .order('sort_order', { ascending:false })
-        .limit(1)
-        .maybeSingle();
-
-      if(lastError){
-        console.error(lastError);
-        alert('추천제안 순서 조회 실패');
-        return;
-      }
-
-      payload.sort_order = (lastRow?.sort_order || 0) + 1;
-
-      const { error } = await window.supabaseClient
-        .from('edu_content_recommendations')
-        .insert([payload]);
-
-      if(error){
-        console.error(error);
-        alert('추천제안 추가 실패');
-        return;
-      }
-    } else {
-      const { error } = await window.supabaseClient
-        .from('edu_content_recommendations')
-        .update(payload)
-        .eq('id', Number(id));
-
-      if(error){
-        console.error(error);
-        alert('추천제안 수정 실패');
-        return;
-      }
-    }
-
-    window.closeRecommendationModal();
-    await window.loadContentRecommendations();
-    setDirty(true);
-  };
-
-  window.handleRecommendationLink = async function(linkType, linkValue, targetContentId){
-    if(linkType === 'external'){
-      if(!linkValue) return;
-      window.open(linkValue, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    const contentId = Number(targetContentId || 0);
-    if(!contentId){
-      alert('연결된 내부 콘텐츠가 없습니다.');
-      return;
-    }
-
-    const { data, error } = await window.supabaseClient
-      .from('edu_contents')
-      .select('id, title, subcategory_id')
-      .eq('id', contentId)
-      .single();
-
-    if(error || !data){
-      console.error(error);
-      alert('연결된 콘텐츠를 찾지 못했습니다.');
-      return;
-    }
-
-    await window.openContent(data.subcategory_id, data.title);
-  };
-
-  window.openContent = async function(subcategoryId, title){
-    window.currentEduSubcategoryId = subcategoryId;
-    try{
-      const content = await window.ensureEduContentRecord(subcategoryId, title);
-      window.currentEduContentId = content.id;
-      window.currentContentMeta = readSummaryMeta(content.summary);
-
-      const recommendations = await fetchContentRecommendations(content.id);
-      const videoMeta = getVideoMeta(content.summary);
-      const recommendHtml = renderRecommendationButtons(recommendations);
-      const videoHtml = renderVideoSection(videoMeta);
-
-      const btn = document.querySelector('#page-content .btn-edit-content');
-      if(btn){
-        btn.dataset.mode = 'view';
-        btn.innerText = '내용 편집하기';
-        btn.style.background = 'var(--uplus-dark)';
-      }
-
-      setDirty(false);
-
-      const viewHtml = `
-        <div id="edu-content-view">
-          <div id="edu-image-slider" style="margin-bottom:16px;"></div>
-          <div class="content-text-box" style="background:#fff; padding:16px; border-radius:12px; line-height:1.7; min-height:180px;">
-            ${content.content_html || '등록된 내용이 없습니다.'}
-          </div>
-          ${videoHtml}
-          ${recommendHtml}
-        </div>
-      `;
-
-      document.getElementById('page-content-dynamic-area').innerHTML = viewHtml;
-      document.getElementById('content-title').innerText = title;
-      window.goToPage('page-content', -1, title);
-      await window.loadContentImages();
-    }catch(e){
-      console.error(e);
-      alert('콘텐츠를 열 수 없습니다.');
-    }
-  };
-
-  function setupEditorBehavior(){
-    const editor = document.getElementById('editor-text');
-    if(!editor) return;
-
-    const mark = () => setDirty(true);
-    ['input', 'keyup', 'paste'].forEach(evt => editor.addEventListener(evt, mark));
-
-    editor.addEventListener('keydown', function(e){
-      if(e.key !== 'Enter') return;
-      const selection = window.getSelection();
-      if(!selection || !selection.rangeCount) return;
-
-      let node = selection.getRangeAt(0).startContainer;
-      while(node && node !== editor){
-        if(node.classList && (
-          node.classList.contains('editor-box-strong') ||
-          node.classList.contains('editor-box-tip') ||
-          node.classList.contains('editor-box-warn')
-        )){
-          e.preventDefault();
-          document.execCommand('insertHTML', false, '<br><br>');
-          mark();
-          return;
-        }
-        node = node.parentNode;
-      }
-    });
-  }
-
-  window.openContentEditor = async function(){
-    if(!window.currentEduContentId){
-      alert('콘텐츠를 먼저 선택하세요.');
-      return;
-    }
-
-    const { data, error } = await window.supabaseClient
-      .from('edu_contents')
-      .select('*')
-      .eq('id', window.currentEduContentId)
-      .single();
-
-    if(error){
-      console.error(error);
-      alert('본문 조회 실패');
-      return;
-    }
-
-    const { data: images, error: imageError } = await window.supabaseClient
-      .from('edu_content_images')
-      .select('*')
-      .eq('content_id', window.currentEduContentId)
-      .order('sort_order', { ascending:true });
-
-    if(imageError){
-      console.error(imageError);
-      alert('이미지 목록 조회 실패');
-      return;
-    }
-
-    window.currentContentMeta = readSummaryMeta(data.summary);
-    const videoMeta = getVideoMeta(data.summary);
-
-    const imageItems = (images || []).map(img => `
-      <div style="display:flex; align-items:center; gap:10px; padding:10px; border:1px solid #eee; border-radius:10px; margin-bottom:8px;">
-        <img src="${img.image_url}" style="width:88px; height:88px; object-fit:cover; border-radius:8px; background:#f6f6f6;">
-        <div style="flex:1; min-width:0;">
-          <div style="font-size:12px; color:#666;">순서: ${img.sort_order}</div>
-          <div style="font-size:12px; color:#999; word-break:break-all;">${img.image_url}</div>
-        </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, -1)">↑</button>
-          <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
-          <button class="btn-admin del" onclick="deleteContentImage(${img.id}, ${JSON.stringify(img.image_url)})">삭제</button>
-        </div>
-      </div>
-    `).join('');
-
-    const editorHtml = `
-      <div style="background:#fff; padding:16px; border-radius:12px;">
-        <div style="font-weight:700; margin-bottom:12px;">내용 편집</div>
-
-        <div style="margin-bottom:20px;">
-          <div style="font-weight:700; margin-bottom:10px;">참고 이미지</div>
-          <input type="file" id="edu-image-input" accept="image/*" multiple style="display:none;" onchange="uploadContentImages(event)">
-          <div style="display:flex; gap:8px; margin-bottom:12px;">
-            <button class="btn-admin edit" onclick="document.getElementById('edu-image-input').click()">이미지 업로드</button>
-          </div>
-          <div>${imageItems || '<div style="color:#888;">등록된 이미지가 없습니다.</div>'}</div>
-        </div>
-
-        <div style="margin-bottom:20px;">
-          <div style="font-weight:700; margin-bottom:10px;">추천 제안</div>
-          <div style="display:flex; gap:8px; margin-bottom:12px;">
-            <button class="btn-admin edit" onclick="addRecommendation()">+ 추가</button>
-          </div>
-          <div id="recommend-manage-list"><div style="color:#888;">불러오는 중...</div></div>
-        </div>
-
-        <div style="margin-bottom:20px;">
-          <div style="font-weight:700; margin-bottom:10px;">참고 동영상</div>
-          <div class="content-video-box" style="margin-top:0;">
-            <div class="rec-form-group" style="margin-bottom:10px;">
-              <label class="rec-form-label" for="content-video-title">버튼 제목</label>
-              <input id="content-video-title" class="rec-form-input" type="text" value="${esc(videoMeta.title)}" placeholder="예: 개통 설명 영상 보기">
-            </div>
-            <div class="rec-form-group" style="margin-bottom:0;">
-              <label class="rec-form-label" for="content-video-url">유튜브 링크</label>
-              <input id="content-video-url" class="rec-form-input" type="text" value="${esc(videoMeta.youtube_url)}" placeholder="https://www.youtube.com/watch?v=...">
-              <div class="rec-form-help">값이 비어 있으면 읽기 전용 페이지에서 동영상 박스는 자동으로 숨겨진다.</div>
-            </div>
-            <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end;">
-              <button class="btn-admin edit video-preview-btn" type="button" onclick="previewVideoInAdmin()">미리보기</button>
-            </div>
-          </div>
-        </div>
-
-        <div style="font-weight:700; margin-bottom:10px;">본문</div>
-        <div class="content-toolbar admin-only" style="display:flex; margin-bottom:0; border-radius:12px 12px 0 0;">
-          <select onchange="execCmdFontSize(this.value)">
-            <option value="2">작게</option><option value="3" selected>기본</option><option value="4">약간크게</option><option value="5">크게</option>
-          </select>
-          <input type="color" onchange="execCmdColor(this.value)" style="padding:0; width:30px; height:24px; border:none; background:none;">
-          <button class="btn-sm btn-outline" style="font-weight:bold;" onclick="execCmdWrapper('bold')">B</button>
-          <button class="btn-sm btn-outline" style="font-style:italic;" onclick="execCmdWrapper('italic')">I</button>
-          <button class="btn-sm btn-outline" style="text-decoration:underline;" onclick="execCmdWrapper('underline')">U</button>
-          <button class="btn-sm btn-outline" onclick="setEditorAlign('left')">좌측</button>
-          <button class="btn-sm btn-outline" onclick="setEditorAlign('center')">중앙</button>
-          <button class="btn-sm btn-outline" onclick="setEditorAlign('right')">우측</button>
-          <button class="btn-sm btn-outline" onclick="insertEditorBlock('strong')">강조박스</button>
-          <button class="btn-sm btn-outline" onclick="insertEditorBlock('tip')">TIP박스</button>
-          <button class="btn-sm btn-outline" onclick="insertEditorBlock('warn')">주의박스</button>
-        </div>
-        <div id="editor-text" class="content-text-box" contenteditable="true" style="border-top-left-radius:0; border-top-right-radius:0; min-height:320px;">${data?.content_html || ''}</div>
-
-        <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
-          <button class="btn-admin edit" onclick="saveContent()">저장</button>
-          <button class="btn-admin del" onclick="toggleContentEdit('page-content')">취소</button>
-        </div>
-      </div>
-    `;
-
-    document.getElementById('page-content-dynamic-area').innerHTML = editorHtml;
-    setupEditorBehavior();
-    document.getElementById('content-video-title')?.addEventListener('input', () => setDirty(true));
-    document.getElementById('content-video-url')?.addEventListener('input', () => setDirty(true));
-    setDirty(false);
-    await window.loadContentRecommendations();
-  };
-
-  window.saveContent = async function(){
-    const content = document.getElementById('editor-text')?.innerHTML || '';
-    const videoTitle = document.getElementById('content-video-title')?.value || '';
-    const videoUrl = document.getElementById('content-video-url')?.value || '';
-    const summary = buildSummaryMeta(videoTitle, videoUrl);
-
-    const { error } = await window.supabaseClient
-      .from('edu_contents')
-      .update({
-        content_html: content,
-        title: document.getElementById('content-title').innerText.trim(),
-        summary
-      })
-      .eq('id', window.currentEduContentId);
-
-    if(error){
-      console.error(error);
-      alert('저장 실패');
-      return;
-    }
-
-    window.currentContentMeta = readSummaryMeta(summary);
-    alert('저장 완료');
-    setDirty(false);
-
-    const btn = document.querySelector('#page-content .btn-edit-content');
-    if(btn){
-      btn.dataset.mode = 'view';
-      btn.innerText = '내용 편집하기';
-      btn.style.background = 'var(--uplus-dark)';
-    }
-
-    await window.openContent(window.currentEduSubcategoryId, document.getElementById('content-title').innerText);
-  };
-
-  setTimeout(() => updateRecommendationTypeUI('external'), 0);
 })();
 </script>
 
 
-
-<script id="oai-admin-multi-video-override">
+<style id="content-read-v2-style">
+.recommend-area,.video-area{margin-top:16px;background:#fff;padding:14px;border-radius:12px}
+#edu-content-view .content-text-box h1,#edu-content-view .content-text-box h2,#edu-content-view .content-text-box h3{margin:0 0 12px;font-weight:800;line-height:1.35}
+#edu-content-view .content-text-box h1{font-size:28px}#edu-content-view .content-text-box h2{font-size:24px}#edu-content-view .content-text-box h3{font-size:20px}
+#edu-content-view .content-text-box p{margin:0 0 12px}
+#edu-content-view .content-text-box .editor-box-strong,#edu-content-view .content-text-box .editor-box-tip,#edu-content-view .content-text-box .editor-box-warn,#edu-content-view .content-text-box .box-strong,#edu-content-view .content-text-box .box-tip,#edu-content-view .content-text-box .box-warn{padding:12px 14px;border-radius:12px;margin:10px 0}
+#edu-content-view .content-text-box .editor-box-strong,#edu-content-view .content-text-box .box-strong{border:1px solid #ffd2ea;background:#fff2f8}
+#edu-content-view .content-text-box .editor-box-tip,#edu-content-view .content-text-box .box-tip{border:1px solid #b9ddff;background:#eef7ff}
+#edu-content-view .content-text-box .editor-box-warn,#edu-content-view .content-text-box .box-warn{border:1px solid #ffd89e;background:#fff8e8}
+.recommend-title,.video-title{font-weight:800;margin-bottom:10px}
+.recommend-link-btn,.video-link-btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 12px;border-radius:10px;background:#f3f4f7;color:#222;text-decoration:none;border:none;cursor:pointer;margin:0 8px 8px 0;font-weight:700}
+.video-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000}
+.video-modal.active{display:flex}
+.video-modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.video-modal-card{position:relative;z-index:1;background:#111;border-radius:14px;padding:12px;width:min(920px,calc(100% - 20px))}
+.video-modal-head{display:flex;justify-content:space-between;align-items:center;color:#fff;margin-bottom:10px}
+.video-modal-close{border:none;background:#fff;color:#111;border-radius:999px;padding:8px 12px;font-weight:700;cursor:pointer}
+.video-frame-wrap{position:relative;width:100%;padding-top:56.25%;background:#000;border-radius:10px;overflow:hidden}
+.video-frame-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+</style>
+<div id="videoModalV2" class="video-modal">
+  <div class="video-modal-bg" onclick="closeVideoModalV2()"></div>
+  <div class="video-modal-card">
+    <div class="video-modal-head">
+      <div id="videoModalTitleV2" style="font-weight:800;">참고 동영상</div>
+      <button type="button" class="video-modal-close" onclick="closeVideoModalV2()">닫기</button>
+    </div>
+    <div class="video-frame-wrap">
+      <iframe id="videoModalFrameV2" src="" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+    </div>
+  </div>
+</div>
+<script id="content-read-v2-script">
 (function(){
-  function esc(str=''){
-    return String(str)
-      .replaceAll('&','&amp;')
-      .replaceAll('<','&lt;')
-      .replaceAll('>','&gt;')
-      .replaceAll('"','&quot;')
-      .replaceAll("'",'&#039;');
+  function esc(v){ return String(v ?? '').replace(/[&<>"']/g, function(s){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]; }); }
+  function toEmbed(url){
+    url = String(url || '').trim();
+    if(!url) return '';
+    if(url.includes('/embed/')) return url.includes('autoplay=1') ? url : (url + (url.includes('?') ? '&' : '?') + 'autoplay=1');
+    var m = url.match(/[?&]v=([^&]+)/);
+    if(m) return 'https://www.youtube.com/embed/' + m[1] + '?autoplay=1';
+    m = url.match(/youtu\.be\/([^?&/]+)/);
+    if(m) return 'https://www.youtube.com/embed/' + m[1] + '?autoplay=1';
+    m = url.match(/youtube\.com\/shorts\/([^?&/]+)/);
+    if(m) return 'https://www.youtube.com/embed/' + m[1] + '?autoplay=1';
+    return url;
   }
-
-  function setDirty(flag=true){
-    window.eduContentDirty = !!flag;
-  }
-
-  function extractYoutubeId(url=''){
-    const value = String(url || '').trim();
-    if(!value) return '';
-    if(/^[a-zA-Z0-9_-]{11}$/.test(value)) return value;
-    try{
-      const u = new URL(value);
-      if(u.hostname.includes('youtu.be')) return u.pathname.replace('/','').slice(0,11);
-      if(u.searchParams.get('v')) return u.searchParams.get('v').slice(0,11);
-      const parts = u.pathname.split('/').filter(Boolean);
-      const idx = parts.findIndex(p => ['embed','shorts','live'].includes(p));
-      if(idx !== -1 && parts[idx+1]) return parts[idx+1].slice(0,11);
-      return '';
-    }catch(e){
-      const match = value.match(/([a-zA-Z0-9_-]{11})/);
-      return match ? match[1] : '';
-    }
-  }
-
-  function getYoutubeEmbedUrl(url, autoplay=true){
-    const videoId = extractYoutubeId(url);
-    if(!videoId) return '';
-    return `https://www.youtube.com/embed/${videoId}?autoplay=${autoplay ? 1 : 0}&rel=0&modestbranding=1&playsinline=1`;
-  }
-
-  async function fetchContentVideos(contentId){
-    if(!contentId) return [];
+  async function fetchRecommendations(contentId){
     const { data, error } = await window.supabaseClient
-      .from('edu_content_videos')
-      .select('id, content_id, title, video_url, sort_order, is_visible')
+      .from('edu_content_recommendations')
+      .select('*')
       .eq('content_id', contentId)
       .eq('is_visible', true)
       .order('sort_order', { ascending:true })
       .order('id', { ascending:true });
-
-    if(error){
-      console.error(error);
-      return [];
-    }
+    if(error){ console.error(error); return []; }
     return data || [];
   }
-
-  function renderVideoButtons(items){
-    if(!items || !items.length) return '';
-    return `
-      <div class="content-video-box">
-        <div class="recommend-title">🎬 참고 동영상</div>
-        <div class="keyword-list content-keyword-list video-button-list">
-          ${items.map(item => {
-            const title = String(item.title || '참고 동영상').trim() || '참고 동영상';
-            const rawUrl = String(item.video_url || '').trim();
-            return `
-              <button
-                type="button"
-                class="content-video-trigger"
-                onclick="openYoutubeVideoModal('${title.replace(/'/g, "\\'")}', '${rawUrl.replace(/'/g, "\\'")}')"
-              >
-                <span>${esc(title)}</span>
-                <span>재생하기</span>
-              </button>
-            `;
-          }).join('')}
-        </div>
-        <div class="content-video-sub">버튼을 누르면 팝업창에서 유튜브 영상이 자동재생된다.</div>
-      </div>
-    `;
-  }
-
-  function renderVideoManageList(items){
-    const wrap = document.getElementById('content-video-manage-list');
-    if(!wrap) return;
-    if(!items || !items.length){
-      wrap.innerHTML = '<div style="color:#888;">등록된 참고 동영상이 없습니다.</div>';
-      return;
-    }
-
-    wrap.innerHTML = items.map(item => {
-      const title = esc(item.title || '참고 동영상');
-      const rawUrl = esc(item.video_url || '');
-      return `
-        <div class="recommend-manage-item">
-          <div style="flex:1; min-width:0;">
-            <div style="font-weight:700; margin-bottom:4px;">${title}</div>
-            <div style="font-size:12px; color:#666; margin-bottom:4px;">순서: ${item.sort_order || 0}</div>
-            <div style="font-size:12px; color:#999; word-break:break-all;">${rawUrl}</div>
-          </div>
-          <div style="display:flex; gap:6px; flex-wrap:wrap;">
-            <button class="btn-admin edit" type="button" onclick="previewContentVideo(${item.id})">미리보기</button>
-            <button class="btn-admin edit" type="button" onclick="editContentVideo(${item.id})">수정</button>
-            <button class="btn-admin edit" type="button" onclick="moveContentVideo(${item.id}, ${item.sort_order}, -1)">↑</button>
-            <button class="btn-admin edit" type="button" onclick="moveContentVideo(${item.id}, ${item.sort_order}, 1)">↓</button>
-            <button class="btn-admin del" type="button" onclick="deleteContentVideo(${item.id})">삭제</button>
-          </div>
-        </div>
-      `;
-    }).join('');
-  }
-
-  window.loadContentVideos = async function(){
-    const items = await fetchContentVideos(window.currentEduContentId);
-    renderVideoManageList(items);
-    return items;
-  };
-
-  window.openContentVideoModal = async function(mode='add', item=null){
-    const overlay = document.getElementById('content-video-form-modal');
-    const titleInput = document.getElementById('content-video-modal-text');
-    const urlInput = document.getElementById('content-video-modal-link');
-    const idInput = document.getElementById('content-video-modal-id');
-    const titleLabel = document.getElementById('content-video-modal-title');
-    if(!overlay || !titleInput || !urlInput || !idInput || !titleLabel) return;
-
-    titleLabel.textContent = mode === 'edit' ? '참고 동영상 수정' : '참고 동영상 추가';
-    idInput.value = item?.id || '';
-    titleInput.value = item?.title || '참고 동영상';
-    urlInput.value = item?.video_url || '';
-    overlay.style.display = 'flex';
-    setTimeout(() => titleInput.focus(), 20);
-  };
-
-  window.closeContentVideoModal = function(){
-    const overlay = document.getElementById('content-video-form-modal');
-    if(overlay) overlay.style.display = 'none';
-  };
-
-  window.addContentVideo = async function(){
-    if(!window.currentEduContentId){
-      alert('콘텐츠를 먼저 선택하세요.');
-      return;
-    }
-    await window.openContentVideoModal('add');
-  };
-
-  window.editContentVideo = async function(videoId){
+  async function fetchVideos(contentId){
     const { data, error } = await window.supabaseClient
       .from('edu_content_videos')
-      .select('id, title, video_url')
-      .eq('id', videoId)
-      .single();
-
-    if(error || !data){
-      console.error(error);
-      alert('동영상 정보를 불러오지 못했습니다.');
-      return;
-    }
-
-    await window.openContentVideoModal('edit', data);
-  };
-
-  window.saveContentVideoModal = async function(){
-    if(!window.currentEduContentId){
-      alert('콘텐츠를 먼저 선택하세요.');
-      return;
-    }
-
-    const idValue = document.getElementById('content-video-modal-id')?.value || '';
-    const title = document.getElementById('content-video-modal-text')?.value || '';
-    const rawUrl = document.getElementById('content-video-modal-link')?.value || '';
-    const trimmedTitle = String(title || '').trim() || '참고 동영상';
-    const trimmedUrl = String(rawUrl || '').trim();
-
-    if(!trimmedUrl){
-      alert('유튜브 링크를 입력하세요.');
-      return;
-    }
-
-    if(!extractYoutubeId(trimmedUrl)){
-      alert('유효한 유튜브 링크가 아닙니다.');
-      return;
-    }
-
-    if(idValue){
-      const { error:updateError } = await window.supabaseClient
-        .from('edu_content_videos')
-        .update({
-          title: trimmedTitle,
-          video_url: trimmedUrl
-        })
-        .eq('id', Number(idValue));
-
-      if(updateError){
-        console.error(updateError);
-        alert('동영상 수정 실패');
-        return;
-      }
-    } else {
-      const { data: lastRow, error: lastError } = await window.supabaseClient
-        .from('edu_content_videos')
-        .select('sort_order')
-        .eq('content_id', window.currentEduContentId)
-        .order('sort_order', { ascending:false })
-        .limit(1)
-        .maybeSingle();
-
-      if(lastError){
-        console.error(lastError);
-        alert('영상 순서 조회 실패');
-        return;
-      }
-
-      const payload = {
-        content_id: window.currentEduContentId,
-        title: trimmedTitle,
-        video_url: trimmedUrl,
-        sort_order: (lastRow?.sort_order || 0) + 1,
-        is_visible: true
-      };
-
-      const { error: insertError } = await window.supabaseClient
-        .from('edu_content_videos')
-        .insert([payload]);
-
-      if(insertError){
-        console.error(insertError);
-        alert('동영상 추가 실패');
-        return;
-      }
-    }
-
-    window.closeContentVideoModal();
-    await window.loadContentVideos();
-    setDirty(true);
-  };
-
-  window.deleteContentVideo = async function(videoId){
-    if(!confirm('이 참고 동영상을 삭제하시겠습니까?')) return;
-
-    const { error } = await window.supabaseClient
-      .from('edu_content_videos')
-      .delete()
-      .eq('id', videoId);
-
-    if(error){
-      console.error(error);
-      alert('동영상 삭제 실패');
-      return;
-    }
-
-    await window.normalizeContentVideoSortOrder();
-    await window.loadContentVideos();
-    setDirty(true);
-  };
-
-  window.moveContentVideo = async function(videoId, sortOrder, direction){
-    if(!window.currentEduContentId) return;
-
-    const targetSort = Number(sortOrder || 0) + Number(direction || 0);
-    if(targetSort < 1) return;
-
-    const { data: neighbor, error: neighborError } = await window.supabaseClient
-      .from('edu_content_videos')
-      .select('id, sort_order')
-      .eq('content_id', window.currentEduContentId)
-      .eq('sort_order', targetSort)
-      .maybeSingle();
-
-    if(neighborError){
-      console.error(neighborError);
-      alert('이동 대상 조회 실패');
-      return;
-    }
-    if(!neighbor) return;
-
-    const { error:e1 } = await window.supabaseClient
-      .from('edu_content_videos')
-      .update({ sort_order: -9999 })
-      .eq('id', videoId);
-    if(e1){ console.error(e1); alert('순서 변경 실패'); return; }
-
-    const { error:e2 } = await window.supabaseClient
-      .from('edu_content_videos')
-      .update({ sort_order: sortOrder })
-      .eq('id', neighbor.id);
-    if(e2){ console.error(e2); alert('순서 변경 실패'); return; }
-
-    const { error:e3 } = await window.supabaseClient
-      .from('edu_content_videos')
-      .update({ sort_order: targetSort })
-      .eq('id', videoId);
-    if(e3){ console.error(e3); alert('순서 변경 실패'); return; }
-
-    await window.loadContentVideos();
-    setDirty(true);
-  };
-
-  window.normalizeContentVideoSortOrder = async function(){
-    if(!window.currentEduContentId) return;
-
-    const { data, error } = await window.supabaseClient
-      .from('edu_content_videos')
-      .select('id, sort_order')
-      .eq('content_id', window.currentEduContentId)
-      .order('sort_order', { ascending:true })
-      .order('id', { ascending:true });
-
-    if(error || !data){
-      console.error(error);
-      return;
-    }
-
-    for(let i=0;i<data.length;i++){
-      const nextOrder = i + 1;
-      if(data[i].sort_order !== nextOrder){
-        await window.supabaseClient
-          .from('edu_content_videos')
-          .update({ sort_order: nextOrder })
-          .eq('id', data[i].id);
-      }
-    }
-  };
-
-  document.addEventListener('keydown', function(e){
-    const overlay = document.getElementById('content-video-form-modal');
-    if(!overlay || overlay.style.display !== 'flex') return;
-    if(e.key === 'Escape'){
-      e.preventDefault();
-      window.closeContentVideoModal();
-      return;
-    }
-    if(e.key === 'Enter' && !e.shiftKey){
-      const active = document.activeElement;
-      if(active && (active.id === 'content-video-modal-text' || active.id === 'content-video-modal-link')){
-        e.preventDefault();
-        window.saveContentVideoModal();
-      }
-    }
-  });
-
-  window.previewContentVideo = async function(videoId){
-    const { data, error } = await window.supabaseClient
-      .from('edu_content_videos')
-      .select('title, video_url')
-      .eq('id', videoId)
-      .single();
-
-    if(error || !data){
-      console.error(error);
-      alert('미리보기할 동영상을 찾지 못했습니다.');
-      return;
-    }
-
-    window.openYoutubeVideoModal(data.title || '참고 동영상', data.video_url || '');
-  };
-
-  function setupEditorBehavior2(){
-    const editor = document.getElementById('editor-text');
-    if(!editor) return;
-
-    const mark = () => setDirty(true);
-    ['input','keyup','paste'].forEach(evt => editor.addEventListener(evt, mark));
-
-    editor.addEventListener('keydown', function(e){
-      if(e.key !== 'Enter') return;
-      const selection = window.getSelection();
-      if(!selection || !selection.rangeCount) return;
-
-      let node = selection.getRangeAt(0).startContainer;
-      while(node && node !== editor){
-        if(node.classList && (
-          node.classList.contains('editor-box-strong') ||
-          node.classList.contains('editor-box-tip') ||
-          node.classList.contains('editor-box-warn')
-        )){
-          e.preventDefault();
-          document.execCommand('insertHTML', false, '<br><br>');
-          mark();
-          return;
-        }
-        node = node.parentNode;
-      }
-    });
-  }
-
-  window.openContent = async function(subcategoryId, title){
-    window.currentEduSubcategoryId = subcategoryId;
-    try{
-      const content = await window.ensureEduContentRecord(subcategoryId, title);
-      window.currentEduContentId = content.id;
-
-      const recommendations = await fetchContentRecommendations(content.id);
-      const videos = await fetchContentVideos(content.id);
-      const recommendHtml = (typeof renderRecommendationButtons === 'function') ? renderRecommendationButtons(recommendations) : '';
-      const videoHtml = renderVideoButtons(videos);
-
-      const btn = document.querySelector('#page-content .btn-edit-content');
-      if(btn){
-        btn.dataset.mode = 'view';
-        btn.innerText = '내용 편집하기';
-        btn.style.background = 'var(--uplus-dark)';
-      }
-
-      setDirty(false);
-
-      const viewHtml = `
-        <div id="edu-content-view">
-          <div id="edu-image-slider" style="margin-bottom:16px;"></div>
-          <div class="content-text-box" style="background:#fff; padding:16px; border-radius:12px; line-height:1.7; min-height:180px;">
-            ${content.content_html || '등록된 내용이 없습니다.'}
-          </div>
-          ${videoHtml}
-          ${recommendHtml}
-        </div>
-      `;
-
-      document.getElementById('page-content-dynamic-area').innerHTML = viewHtml;
-      document.getElementById('content-title').innerText = title;
-      window.goToPage('page-content', -1, title);
-      await window.loadContentImages();
-    }catch(e){
-      console.error(e);
-      alert('콘텐츠를 열 수 없습니다.');
-    }
-  };
-
-  window.openContentEditor = async function(){
-    if(!window.currentEduContentId){
-      alert('콘텐츠를 먼저 선택하세요.');
-      return;
-    }
-
-    const { data, error } = await window.supabaseClient
-      .from('edu_contents')
       .select('*')
-      .eq('id', window.currentEduContentId)
-      .single();
-
-    if(error){
-      console.error(error);
-      alert('본문 조회 실패');
-      return;
-    }
-
-    const { data: images, error: imageError } = await window.supabaseClient
-      .from('edu_content_images')
-      .select('*')
-      .eq('content_id', window.currentEduContentId)
-      .order('sort_order', { ascending:true });
-
-    if(imageError){
-      console.error(imageError);
-      alert('이미지 목록 조회 실패');
-      return;
-    }
-
-    const imageItems = (images || []).map(img => `
-      <div style="display:flex; align-items:center; gap:10px; padding:10px; border:1px solid #eee; border-radius:10px; margin-bottom:8px;">
-        <img src="${img.image_url}" style="width:88px; height:88px; object-fit:cover; border-radius:8px; background:#f6f6f6;">
-        <div style="flex:1; min-width:0;">
-          <div style="font-size:12px; color:#666;">순서: ${img.sort_order}</div>
-          <div style="font-size:12px; color:#999; word-break:break-all;">${img.image_url}</div>
-        </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, -1)">↑</button>
-          <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
-          <button class="btn-admin del" onclick="deleteContentImage(${img.id}, ${JSON.stringify(img.image_url)})">삭제</button>
-        </div>
-      </div>
-    `).join('');
-
-    const editorHtml = `
-      <div style="background:#fff; padding:16px; border-radius:12px;">
-        <div style="font-weight:700; margin-bottom:12px;">내용 편집</div>
-
-        <div style="margin-bottom:20px;">
-          <div style="font-weight:700; margin-bottom:10px;">참고 이미지</div>
-          <input type="file" id="edu-image-input" accept="image/*" multiple style="display:none;" onchange="uploadContentImages(event)">
-          <div style="display:flex; gap:8px; margin-bottom:12px;">
-            <button class="btn-admin edit" onclick="document.getElementById('edu-image-input').click()">이미지 업로드</button>
-          </div>
-          <div>${imageItems || '<div style="color:#888;">등록된 이미지가 없습니다.</div>'}</div>
-        </div>
-
-        <div style="margin-bottom:20px;">
-          <div style="font-weight:700; margin-bottom:10px;">추천 제안</div>
-          <div style="display:flex; gap:8px; margin-bottom:12px;">
-            <button class="btn-admin edit" onclick="addRecommendation()">+ 추가</button>
-          </div>
-          <div id="recommend-manage-list"><div style="color:#888;">불러오는 중...</div></div>
-        </div>
-
-        <div style="margin-bottom:20px;">
-          <div style="font-weight:700; margin-bottom:10px;">참고 동영상</div>
-          <div style="display:flex; gap:8px; margin-bottom:12px;">
-            <button class="btn-admin edit" type="button" onclick="addContentVideo()">+ 동영상 추가</button>
-          </div>
-          <div id="content-video-manage-list"><div style="color:#888;">불러오는 중...</div></div>
-        </div>
-
-        <div style="font-weight:700; margin-bottom:10px;">본문</div>
-        <div class="content-toolbar admin-only" style="display:flex; margin-bottom:0; border-radius:12px 12px 0 0;">
-          <select onchange="execCmdFontSize(this.value)">
-            <option value="2">작게</option><option value="3" selected>기본</option><option value="4">약간크게</option><option value="5">크게</option>
-          </select>
-          <input type="color" onchange="execCmdColor(this.value)" style="padding:0; width:30px; height:24px; border:none; background:none;">
-          <button class="btn-sm btn-outline" style="font-weight:bold;" onclick="execCmdWrapper('bold')">B</button>
-          <button class="btn-sm btn-outline" style="font-style:italic;" onclick="execCmdWrapper('italic')">I</button>
-          <button class="btn-sm btn-outline" style="text-decoration:underline;" onclick="execCmdWrapper('underline')">U</button>
-          <button class="btn-sm btn-outline" onclick="setEditorAlign('left')">좌측</button>
-          <button class="btn-sm btn-outline" onclick="setEditorAlign('center')">중앙</button>
-          <button class="btn-sm btn-outline" onclick="setEditorAlign('right')">우측</button>
-          <button class="btn-sm btn-outline" onclick="insertEditorBlock('strong')">강조박스</button>
-          <button class="btn-sm btn-outline" onclick="insertEditorBlock('tip')">TIP박스</button>
-          <button class="btn-sm btn-outline" onclick="insertEditorBlock('warn')">주의박스</button>
-        </div>
-        <div id="editor-text" class="content-text-box" contenteditable="true" style="border-top-left-radius:0; border-top-right-radius:0; min-height:320px;">${data?.content_html || ''}</div>
-
-        <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
-          <button class="btn-admin edit" onclick="saveContent()">저장</button>
-          <button class="btn-admin del" onclick="toggleContentEdit('page-content')">취소</button>
-        </div>
-      </div>
-    `;
-
-    document.getElementById('page-content-dynamic-area').innerHTML = editorHtml;
-    setupEditorBehavior2();
-    setDirty(false);
-    await window.loadContentRecommendations();
-    await window.loadContentVideos();
-  };
-
-  window.saveContent = async function(){
-    const content = document.getElementById('editor-text')?.innerHTML || '';
-
-    const { error } = await window.supabaseClient
-      .from('edu_contents')
-      .update({
-        content_html: content,
-        title: document.getElementById('content-title').innerText.trim()
-      })
-      .eq('id', window.currentEduContentId);
-
-    if(error){
-      console.error(error);
-      alert('저장 실패');
-      return;
-    }
-
-    alert('저장 완료');
-    setDirty(false);
-
-    const btn = document.querySelector('#page-content .btn-edit-content');
-    if(btn){
-      btn.dataset.mode = 'view';
-      btn.innerText = '내용 편집하기';
-      btn.style.background = 'var(--uplus-dark)';
-    }
-
-    await window.openContent(window.currentEduSubcategoryId, document.getElementById('content-title').innerText);
-  };
-})();
-</script>
-
-<script id="oai-slider-modal-fixes">
-(function(){
-  function lockModalBody(){ document.body.classList.add('modal-open'); }
-  function unlockModalBody(){
-    if(!document.getElementById('fullscreen-slider-overlay') && document.getElementById('youtube-video-modal')?.style.display !== 'flex' && document.getElementById('recommendation-modal-overlay')?.style.display !== 'flex'){
-      document.body.classList.remove('modal-open');
-    }
-  }
-
-  function modalZone(rect, x){
-    const ratio = x / rect.width;
-    if(ratio < 0.22) return 'left';
-    if(ratio > 0.78) return 'right';
-    return 'center';
-  }
-
-  function bindSliderPointer(surface){
-    if(!surface || surface.dataset.bound === '1') return;
-    surface.dataset.bound = '1';
-    let startX = 0, startY = 0, moved = false;
-
-    surface.addEventListener('touchstart', (e) => {
-      const t = e.touches[0];
-      startX = t.clientX;
-      startY = t.clientY;
-      moved = false;
-    }, { passive:true });
-
-    surface.addEventListener('touchmove', (e) => {
-      const t = e.touches[0];
-      if(Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10) moved = true;
-    }, { passive:true });
-
-    surface.addEventListener('touchend', (e) => {
-      const t = e.changedTouches[0];
-      const diffX = t.clientX - startX;
-      const absX = Math.abs(diffX);
-      const rect = surface.getBoundingClientRect();
-      const zone = modalZone(rect, t.clientX - rect.left);
-
-      if(absX > 40){
-        if(diffX > 0) window.prevImage(); else window.nextImage();
-        return;
-      }
-
-      if(!moved){
-        if(zone === 'left') window.prevImage();
-        else if(zone === 'right') window.nextImage();
-        else window.openZoomModal(window._sliderIndex);
-      }
-    }, { passive:true });
-
-    surface.addEventListener('click', (e) => {
-      if(document.getElementById('fullscreen-slider-overlay')) return;
-      const rect = surface.getBoundingClientRect();
-      const zone = modalZone(rect, e.clientX - rect.left);
-      if(zone === 'left') window.prevImage();
-      else if(zone === 'right') window.nextImage();
-      else window.openZoomModal(window._sliderIndex);
-    });
-  }
-
-  window.bindContentSliderInteractions = function(){
-    const surface = document.getElementById('slider-surface');
-    bindSliderPointer(surface);
-  };
-
-  window.closeZoomModal = function(){
-    const overlay = document.getElementById('fullscreen-slider-overlay');
-    if(overlay) overlay.remove();
-    unlockModalBody();
-    document.removeEventListener('keydown', onFullscreenKeydown, true);
-  };
-
-  function onFullscreenKeydown(e){
-    if(!document.getElementById('fullscreen-slider-overlay')) return;
-    if(e.key === 'Escape'){
-      e.preventDefault();
-      e.stopPropagation();
-      window.closeZoomModal();
-      return;
-    }
-    if(e.key === 'ArrowLeft'){
-      e.preventDefault();
-      e.stopPropagation();
-      window.prevFullscreenImage();
-      return;
-    }
-    if(e.key === 'ArrowRight'){
-      e.preventDefault();
-      e.stopPropagation();
-      window.nextFullscreenImage();
-    }
-  }
-
-  window.openZoomModal = function(startIndex){
-    const data = window._sliderData || [];
-    if(!data.length) return;
-    window._sliderIndex = typeof startIndex === 'number' ? startIndex : (window._sliderIndex || 0);
-
-    const existing = document.getElementById('fullscreen-slider-overlay');
-    if(existing) existing.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = 'fullscreen-slider-overlay';
-    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:99999; display:flex; align-items:center; justify-content:center; padding:20px;';
-    overlay.innerHTML = `
-      <button id="fullscreen-close-btn" type="button" style="position:absolute; top:18px; right:18px; width:44px; height:44px; border:none; border-radius:999px; background:rgba(255,255,255,.22); color:#fff; font-size:22px; cursor:pointer; z-index:100001;">✕</button>
-      <div id="fullscreen-slider-surface" style="position:relative; width:100%; max-width:1200px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-        <div class="fullscreen-hit-left" aria-hidden="true"></div>
-        <div class="fullscreen-hit-center" aria-hidden="true"></div>
-        <div class="fullscreen-hit-right" aria-hidden="true"></div>
-        <img id="fullscreen-slider-image" src="${data[window._sliderIndex].image_url}" style="max-width:100%; max-height:78vh; object-fit:contain; border-radius:12px; pointer-events:none;">
-        <div id="fullscreen-slider-dots" style="display:flex; justify-content:center; gap:8px; margin-top:16px; position:relative; z-index:100002;">
-          ${data.map((_, idx) => `<span class="content-page-dot${idx === window._sliderIndex ? ' active' : ''}" onclick="setFullscreenContentImagePage(${idx})"></span>`).join('')}
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    lockModalBody();
-
-    const closeBtn = document.getElementById('fullscreen-close-btn');
-    if(closeBtn){
-      closeBtn.addEventListener('click', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        window.closeZoomModal();
-      }, true);
-      closeBtn.addEventListener('touchend', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        window.closeZoomModal();
-      }, { passive:false, capture:true });
-    }
-
-    overlay.addEventListener('click', (e) => {
-      if(e.target === overlay) window.closeZoomModal();
-    }, true);
-
-    const surface = document.getElementById('fullscreen-slider-surface');
-    let startX = 0, startY = 0, moved = false;
-
-    surface.addEventListener('touchstart', (e) => {
-      const t = e.touches[0];
-      startX = t.clientX;
-      startY = t.clientY;
-      moved = false;
-      e.stopPropagation();
-    }, { passive:true });
-
-    surface.addEventListener('touchmove', (e) => {
-      const t = e.touches[0];
-      if(Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10) moved = true;
-      e.stopPropagation();
-    }, { passive:true });
-
-    surface.addEventListener('touchend', (e) => {
-      const t = e.changedTouches[0];
-      const diffX = t.clientX - startX;
-      const absX = Math.abs(diffX);
-      const rect = surface.getBoundingClientRect();
-      const zone = modalZone(rect, t.clientX - rect.left);
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      if(absX > 40){
-        if(diffX > 0) window.prevFullscreenImage();
-        else window.nextFullscreenImage();
-        return;
-      }
-
-      if(!moved){
-        if(zone === 'left') window.prevFullscreenImage();
-        else if(zone === 'right') window.nextFullscreenImage();
-      }
-    }, { passive:false });
-
-    surface.addEventListener('click', (e) => {
-      if(e.target.id === 'fullscreen-close-btn') return;
-      const rect = surface.getBoundingClientRect();
-      const zone = modalZone(rect, e.clientX - rect.left);
-      e.preventDefault();
-      e.stopPropagation();
-      if(zone === 'left') window.prevFullscreenImage();
-      else if(zone === 'right') window.nextFullscreenImage();
-    }, true);
-
-    document.addEventListener('keydown', onFullscreenKeydown, true);
-  };
-
-  const prevCloseRecommendationModal = window.closeRecommendationModal;
-  window.closeRecommendationModal = function(){
-    if(typeof prevCloseRecommendationModal === 'function') prevCloseRecommendationModal();
-    unlockModalBody();
-  };
-  const prevOpenRecommendationModal = window.openRecommendationModal;
-  window.openRecommendationModal = async function(mode='add', item=null){
-    await prevOpenRecommendationModal(mode, item);
-    lockModalBody();
-  };
-})();
-</script>
-
-
-
-<script id="oai-recommendation-visibility-fix-v5">
-(function(){
-  function esc(v){
-    return String(v ?? '')
-      .replace(/&/g,'&amp;')
-      .replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;')
-      .replace(/'/g,'&#39;');
-  }
-
-  async function fetchRecommendationItemsFixed(contentId){
-    if(!contentId || !window.supabaseClient) return [];
-    const { data, error } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .select('id, content_id, title, link_type, link_value, target_content_id, sort_order, is_visible')
-      .eq('content_id', contentId)
-      .order('sort_order', { ascending:true })
-      .order('id', { ascending:true });
-
-    if(error){
-      console.error('추천제안 목록 조회 실패:', error);
-      return [];
-    }
-
-    let titleMap = {};
-    const targetIds = [...new Set((data || []).map(item => item.target_content_id).filter(Boolean))];
-    if(targetIds.length){
-      const { data: targets, error: targetError } = await window.supabaseClient
-        .from('edu_contents')
-        .select('id, title')
-        .in('id', targetIds);
-      if(!targetError){
-        (targets || []).forEach(row => { titleMap[row.id] = row.title || `콘텐츠 ${row.id}`; });
-      }
-    }
-
-    return (data || []).filter(item => item.is_visible !== false).map(item => ({
-      ...item,
-      target_content_title: item.target_content_id ? (titleMap[item.target_content_id] || `콘텐츠 ${item.target_content_id}`) : ''
-    }));
-  }
-
-  function renderRecommendationManageListFixed(items){
-    const wrap = document.getElementById('recommend-manage-list');
-    if(!wrap) return;
-
-    if(!items || !items.length){
-      wrap.innerHTML = '<div style="color:#888;">추천 제안이 없습니다.</div>';
-      return;
-    }
-
-    wrap.innerHTML = items.map(item => `
-      <div class="recommend-manage-item">
-        <div style="flex:1; min-width:0;">
-          <div style="font-size:13px; font-weight:700; margin-bottom:4px;">${esc(item.title)}</div>
-          <div style="font-size:12px; color:#777; margin-bottom:2px;">${item.link_type === 'internal' ? '내부콘텐츠' : '외부링크'}</div>
-          <div style="font-size:12px; color:#999; word-break:break-all;">
-            ${item.link_type === 'internal'
-              ? esc(item.target_content_title || `콘텐츠 ID ${item.target_content_id || ''}`)
-              : esc(item.link_value || '')}
-          </div>
-        </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="btn-admin edit" onclick="moveRecommendation(${item.id}, ${item.sort_order || 0}, -1)">↑</button>
-          <button class="btn-admin edit" onclick="moveRecommendation(${item.id}, ${item.sort_order || 0}, 1)">↓</button>
-          <button class="btn-admin edit" onclick="editRecommendation(${item.id})">수정</button>
-          <button class="btn-admin del" onclick="deleteRecommendation(${item.id})">삭제</button>
-        </div>
-      </div>
-    `).join('');
-  }
-
-  window.fetchContentRecommendations = fetchRecommendationItemsFixed;
-  window.renderRecommendationManageList = renderRecommendationManageListFixed;
-  window.loadContentRecommendations = async function(){
-    const wrap = document.getElementById('recommend-manage-list');
-    if(!wrap) return [];
-    wrap.innerHTML = '<div style="color:#888;">불러오는 중...</div>';
-    const items = await fetchRecommendationItemsFixed(window.currentEduContentId);
-    renderRecommendationManageListFixed(items);
-    return items;
-  };
-
-  const observer = new MutationObserver(() => {
-    const wrap = document.getElementById('recommend-manage-list');
-    if(wrap && window.currentEduContentId && !wrap.dataset.autoLoaded){
-      wrap.dataset.autoLoaded = '1';
-      window.loadContentRecommendations();
-    }
-  });
-
-  if(document.body){
-    observer.observe(document.body, { childList:true, subtree:true });
-  } else {
-    window.addEventListener('DOMContentLoaded', () => observer.observe(document.body, { childList:true, subtree:true }));
-  }
-
-  const originalSaveRecommendationModal = window.saveRecommendationModal;
-  if(typeof originalSaveRecommendationModal === 'function'){
-    window.saveRecommendationModal = async function(){
-      const result = await originalSaveRecommendationModal.apply(this, arguments);
-      setTimeout(() => window.loadContentRecommendations(), 30);
-      return result;
-    };
-  }
-
-  const originalDeleteRecommendation = window.deleteRecommendation;
-  if(typeof originalDeleteRecommendation === 'function'){
-    window.deleteRecommendation = async function(){
-      const result = await originalDeleteRecommendation.apply(this, arguments);
-      setTimeout(() => window.loadContentRecommendations(), 30);
-      return result;
-    };
-  }
-})();
-
-
-(function(){
-  function esc(str){
-    return String(str ?? '')
-      .replace(/&/g,'&amp;')
-      .replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;')
-      .replace(/'/g,'&#39;');
-  }
-
-  async function fetchRecommendationsLatest(contentId){
-    if(!contentId) return [];
-    const { data, error } = await window.supabaseClient
-      .from('edu_content_recommendations')
-      .select('id, content_id, title, link_type, link_value, target_content_id, sort_order, is_visible')
       .eq('content_id', contentId)
       .eq('is_visible', true)
       .order('sort_order', { ascending:true })
       .order('id', { ascending:true });
-
-    if(error){
-      console.error('추천제안 조회 실패:', error);
-      return [];
-    }
-
-    const targetIds = [...new Set((data || []).map(item => item.target_content_id).filter(Boolean))];
-    const titleMap = {};
-
-    if(targetIds.length){
-      const { data: targets, error: targetError } = await window.supabaseClient
-        .from('edu_contents')
-        .select('id, title')
-        .in('id', targetIds);
-      if(targetError){
-        console.error('추천제안 대상 콘텐츠 조회 실패:', targetError);
-      } else {
-        (targets || []).forEach(row => {
-          titleMap[row.id] = row.title || `콘텐츠 ${row.id}`;
-        });
-      }
-    }
-
-    return (data || []).map(item => ({
-      ...item,
-      target_content_title: item.target_content_id ? (titleMap[item.target_content_id] || `콘텐츠 ${item.target_content_id}`) : ''
-    }));
+    if(error){ console.error(error); return []; }
+    return data || [];
   }
-
-  function renderRecommendationButtonsLatest(items){
-    if(!items || !items.length) return '';
-    return `
-      <div class="recommend-area">
-        <div class="recommend-title">💡 추천 제안</div>
-        <div class="keyword-list content-keyword-list">
-          ${items.map(item => `
-            <button
-              type="button"
-              class="recommend-link-btn"
-              onclick="window.handleRecommendationLink(${JSON.stringify(String(item.link_type || ''))}, ${JSON.stringify(String(item.link_value || ''))}, ${item.target_content_id ?? 'null'})"
-            >${esc(item.title)}</button>
-          `).join('')}
-        </div>
-      </div>
-    `;
+  window.closeVideoModalV2 = function(){
+    var modal = document.getElementById('videoModalV2');
+    var frame = document.getElementById('videoModalFrameV2');
+    if(frame) frame.src = '';
+    if(modal) modal.classList.remove('active');
+    document.body.style.overflow = '';
+  };
+  window.openVideoModalV2 = function(title, url){
+    var modal = document.getElementById('videoModalV2');
+    var frame = document.getElementById('videoModalFrameV2');
+    var titleEl = document.getElementById('videoModalTitleV2');
+    if(titleEl) titleEl.textContent = title || '참고 동영상';
+    if(frame) frame.src = toEmbed(url);
+    if(modal) modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  };
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') window.closeVideoModalV2(); });
+  window.handleRecommendationLink = async function(linkType, linkValue, targetContentId){
+    if(linkType === 'external'){
+      if(linkValue) window.open(linkValue, '_blank');
+      return;
+    }
+    if(linkType === 'internal' && targetContentId){
+      const { data, error } = await window.supabaseClient.from('edu_contents').select('id, subcategory_id, title').eq('id', targetContentId).single();
+      if(error || !data){ console.error(error); alert('연결된 콘텐츠를 열 수 없습니다.'); return; }
+      await window.openContent(data.subcategory_id, data.title || '콘텐츠');
+    }
+  };
+  function renderRecommendations(items){
+    const valid = (items || []).filter(function(item){
+      if(item.link_type === 'external') return !!String(item.link_value || '').trim();
+      if(item.link_type === 'internal') return !!item.target_content_id;
+      return false;
+    });
+    if(!valid.length) return '';
+    return '<div class="recommend-area"><div class="recommend-title">💡 추천 제안</div><div class="keyword-list content-keyword-list">' + valid.map(function(item){
+      return '<button type="button" class="recommend-link-btn js-recommend-btn" data-link-type="' + esc(String(item.link_type || '')) + '" data-link-value="' + esc(String(item.link_value || '')) + '" data-target-content-id="' + (item.target_content_id == null ? '' : Number(item.target_content_id)) + '">' + esc(item.title || '이동') + '</button>';
+    }).join('') + '</div></div>';
   }
-
-  window.fetchContentRecommendations = fetchRecommendationsLatest;
-  window.renderRecommendationButtons = renderRecommendationButtonsLatest;
-
+  function renderVideos(items){
+    const valid = (items || []).filter(function(item){ return !!String(item.video_url || '').trim(); });
+    if(!valid.length) return '';
+    return '<div class="video-area"><div class="video-title">📺 참고 동영상</div><div class="keyword-list content-keyword-list">' + valid.map(function(item){
+      return '<button type="button" class="video-link-btn js-video-btn" data-video-title="' + esc(String(item.title || '참고 동영상')) + '" data-video-url="' + esc(String(item.video_url || '')) + '">' + esc(item.title || '영상 보기') + '</button>';
+    }).join('') + '</div></div>';
+  }
+  document.addEventListener('click', function(e){
+    const recBtn = e.target.closest('.js-recommend-btn');
+    if(recBtn){
+      e.preventDefault();
+      const linkType = recBtn.dataset.linkType || '';
+      const linkValue = recBtn.dataset.linkValue || '';
+      const rawTarget = recBtn.dataset.targetContentId || '';
+      const targetContentId = rawTarget ? Number(rawTarget) : null;
+      window.handleRecommendationLink(linkType, linkValue, targetContentId);
+      return;
+    }
+    const videoBtn = e.target.closest('.js-video-btn');
+    if(videoBtn){
+      e.preventDefault();
+      const title = videoBtn.dataset.videoTitle || '참고 동영상';
+      const url = videoBtn.dataset.videoUrl || '';
+      window.openVideoModalV2(title, url);
+    }
+  });
+  var originalOpenContent = window.openContent;
   window.openContent = async function(subcategoryId, title){
     window.currentEduSubcategoryId = subcategoryId;
     try{
       const content = await window.ensureEduContentRecord(subcategoryId, title);
       window.currentEduContentId = content.id;
-
-      const recommendations = await window.fetchContentRecommendations(content.id);
-      const videos = (typeof window.fetchContentVideos === 'function')
-        ? await window.fetchContentVideos(content.id)
-        : (typeof fetchContentVideos === 'function' ? await fetchContentVideos(content.id) : []);
-
-      const recommendHtml = window.renderRecommendationButtons(recommendations);
-      const videoHtml = (typeof renderVideoButtons === 'function') ? renderVideoButtons(videos) : '';
-
       const btn = document.querySelector('#page-content .btn-edit-content');
-      if(btn){
-        btn.dataset.mode = 'view';
-        btn.innerText = '내용 편집하기';
-        btn.style.background = 'var(--uplus-dark)';
-      }
-
-      if(typeof window.setDirty === 'function'){
-        window.setDirty(false);
-      } else if(typeof setDirty === 'function'){
-        setDirty(false);
-      } else if(typeof dirty !== 'undefined') {
-        dirty = false;
-      }
-
-      const viewHtml = `
-        <div id="edu-content-view">
-          <div id="edu-image-slider" style="margin-bottom:16px;"></div>
-          <div class="content-text-box" style="background:#fff; padding:16px; border-radius:12px; line-height:1.7; min-height:180px;">
-            ${content.content_html || '등록된 내용이 없습니다.'}
-          </div>
-          ${videoHtml}
-          ${recommendHtml}
-        </div>
-      `;
-
+      if(btn){ btn.dataset.mode = 'view'; btn.innerText = 'editor에서 편집하기'; btn.style.background = 'var(--uplus-dark)'; }
+      if(typeof dirty !== 'undefined') dirty = false;
+      const [recs, vids] = await Promise.all([fetchRecommendations(content.id), fetchVideos(content.id)]);
+      const viewHtml = '\n        <div id="edu-content-view">\n          <div id="edu-image-slider" style="margin-bottom:16px;"></div>\n          <div class="content-text-box" style="background:#fff; padding:16px; border-radius:12px; line-height:1.7; min-height:180px;">\n            ' + (content.content_html || '등록된 내용이 없습니다.') + '\n          </div>\n          ' + renderRecommendations(recs) + '\n          ' + renderVideos(vids) + '\n        </div>\n      ';
       document.getElementById('page-content-dynamic-area').innerHTML = viewHtml;
       document.getElementById('content-title').innerText = title;
       window.goToPage('page-content', -1, title);
-      if(typeof window.loadContentImages === 'function'){
-        await window.loadContentImages();
-      }
-    }catch(e){
-      console.error(e);
-      alert('콘텐츠를 열 수 없습니다.');
-    }
+      await window.loadContentImages();
+    }catch(e){ console.error(e); alert('콘텐츠를 열 수 없습니다.'); }
   };
-})();
-
-</script>
-
-
-<script id="oai-final-image-storage-zoom-override">
-(function(){
-  function escapeHtml(value){
-    return String(value || '').replace(/[&<>"']/g, function(ch){
-      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];
-    });
+  async function openContentById(contentId){
+    const { data, error } = await window.supabaseClient.from('edu_contents').select('id, subcategory_id, title').eq('id', contentId).single();
+    if(error || !data){ console.error(error); return; }
+    await window.openContent(data.subcategory_id, data.title || '콘텐츠');
   }
-
-  function extractEduImagePath(url){
-    const raw = String(url || '').trim();
-    if(!raw) return '';
-    const m = raw.match(/\/object\/(?:public|sign)\/edu-images\/(.+?)(?:\?|$)/);
-    return m ? decodeURIComponent(m[1]) : '';
-  }
-
-  async function refreshAfterImageChange(){
-    if(typeof window.normalizeContentImageSortOrder === 'function'){
-      await window.normalizeContentImageSortOrder();
+  document.addEventListener('DOMContentLoaded', function(){
+    var params = new URLSearchParams(location.search);
+    var openId = Number(params.get('open_content_id') || 0);
+    if(openId){
+      openContentById(openId).finally(function(){
+        document.body.classList.add('route-ready');
+      });
+    } else {
+      document.body.classList.add('route-ready');
     }
-    if(typeof window.openContentEditor === 'function'){
-      await window.openContentEditor();
-    }
-  }
-
-  window.deleteContentImage = async function(imageId, imageUrl){
-    if(!confirm('이 이미지를 삭제하시겠습니까?')) return;
-
-    const { data: row, error: rowError } = await window.supabaseClient
-      .from('edu_content_images')
-      .select('id, image_url, storage_path')
-      .eq('id', imageId)
-      .maybeSingle();
-
-    if(rowError){
-      console.error(rowError);
-      alert('삭제할 이미지 정보를 불러오지 못했습니다.');
-      return;
-    }
-
-    const finalUrl = row?.image_url || imageUrl || '';
-    const storagePath = row?.storage_path || extractEduImagePath(finalUrl);
-
-    if(storagePath){
-      const { error: storageError } = await window.supabaseClient
-        .storage
-        .from('edu-images')
-        .remove([storagePath]);
-
-      if(storageError){
-        console.error(storageError);
-        alert('스토리지 이미지 삭제에 실패했습니다.');
-        return;
-      }
-    }
-
-    const { error: dbError } = await window.supabaseClient
-      .from('edu_content_images')
-      .delete()
-      .eq('id', imageId);
-
-    if(dbError){
-      console.error(dbError);
-      alert('DB 이미지 삭제에 실패했습니다.');
-      return;
-    }
-
-    await refreshAfterImageChange();
-  };
-
-  function updateInlineSliderView(){
-    const data = window._sliderData || [];
-    const idx = window._sliderIndex || 0;
-    const img = document.getElementById('slider-image');
-    if(!img) return;
-    if(!data.length){
-      img.removeAttribute('src');
-      return;
-    }
-    img.src = data[idx].image_url;
-    document.querySelectorAll('#slider-dots .content-page-dot').forEach((dot, i) => {
-      dot.classList.toggle('active', i === idx);
-    });
-  }
-
-  window.setContentImagePage = function(index){
-    const data = window._sliderData || [];
-    if(!data.length) return;
-    const next = Math.max(0, Math.min(index, data.length - 1));
-    window._sliderIndex = next;
-    updateInlineSliderView();
-  };
-
-  window.prevImage = function(){
-    const data = window._sliderData || [];
-    if(!data.length) return;
-    window._sliderIndex = (window._sliderIndex - 1 + data.length) % data.length;
-    updateInlineSliderView();
-  };
-
-  window.nextImage = function(){
-    const data = window._sliderData || [];
-    if(!data.length) return;
-    window._sliderIndex = (window._sliderIndex + 1) % data.length;
-    updateInlineSliderView();
-  };
-
-  function bindInlineSliderInteractions(){
-    const surface = document.getElementById('slider-surface');
-    const img = document.getElementById('slider-image');
-    if(!surface || !img) return;
-
-    surface.style.touchAction = 'pan-y';
-    img.style.touchAction = 'pan-y';
-
-    let startX = 0;
-    let startY = 0;
-    let moved = false;
-
-    surface.addEventListener('touchstart', (e) => {
-      if(!e.touches || !e.touches.length) return;
-      const t = e.touches[0];
-      startX = t.clientX;
-      startY = t.clientY;
-      moved = false;
-    }, { passive:true });
-
-    surface.addEventListener('touchmove', (e) => {
-      if(!e.touches || !e.touches.length) return;
-      const t = e.touches[0];
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
-      if(Math.abs(dx) > 10 || Math.abs(dy) > 10) moved = true;
-    }, { passive:true });
-
-    surface.addEventListener('touchend', (e) => {
-      if(!e.changedTouches || !e.changedTouches.length) return;
-      const t = e.changedTouches[0];
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
-      const absX = Math.abs(dx);
-      const absY = Math.abs(dy);
-
-      if(absX > 45 && absX > absY){
-        if(dx > 0) window.prevImage();
-        else window.nextImage();
-        return;
-      }
-
-      if(!moved){
-        window.openZoomModal(window._sliderIndex || 0);
-      }
-    }, { passive:true });
-
-    surface.addEventListener('click', () => {
-      window.openZoomModal(window._sliderIndex || 0);
-    });
-  }
-
-  window.loadContentImages = async function(){
-    const container = document.getElementById('edu-image-slider');
-    if(!container || !window.currentEduContentId) return;
-
-    const { data, error } = await window.supabaseClient
-      .from('edu_content_images')
-      .select('*')
-      .eq('content_id', window.currentEduContentId)
-      .order('sort_order', { ascending:true });
-
-    if(error){
-      console.error(error);
-      container.innerHTML = '';
-      return;
-    }
-
-    if(!data || !data.length){
-      container.innerHTML = '';
-      window._sliderData = [];
-      window._sliderIndex = 0;
-      return;
-    }
-
-    window._sliderData = data;
-    window._sliderIndex = 0;
-
-    const dots = data.map((_, idx) => `<span class="content-page-dot${idx === 0 ? ' active' : ''}" onclick="setContentImagePage(${idx})"></span>`).join('');
-
-    container.innerHTML = `
-      <div id="slider-surface" style="background:#fff; padding:12px; border-radius:12px; cursor:zoom-in;">
-        <img id="slider-image" src="${escapeHtml(data[0].image_url)}" style="width:100%; max-height:320px; object-fit:contain; border-radius:12px; background:#f7f7f7; display:block; user-select:none; -webkit-user-drag:none;">
-        <div id="slider-dots" style="display:flex; justify-content:center; gap:8px; margin-top:12px;">${dots}</div>
-      </div>
-    `;
-
-    bindInlineSliderInteractions();
-  };
-
-  function clamp(value, min, max){
-    return Math.min(max, Math.max(min, value));
-  }
-
-  function getDistance(t1, t2){
-    const dx = t2.clientX - t1.clientX;
-    const dy = t2.clientY - t1.clientY;
-    return Math.sqrt(dx * dx + dy * dy);
-  }
-
-  function resetZoomState(state){
-    state.scale = 1;
-    state.x = 0;
-    state.y = 0;
-  }
-
-  function applyTransform(img, state){
-    img.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
-  }
-
-  function updateFullscreenView(){
-    const data = window._sliderData || [];
-    const idx = window._sliderIndex || 0;
-    const img = document.getElementById('fullscreen-slider-image');
-    const title = document.getElementById('fullscreen-slider-counter');
-    const prevBtn = document.getElementById('fullscreen-prev-btn');
-    const nextBtn = document.getElementById('fullscreen-next-btn');
-    if(!img || !data.length) return;
-    img.src = data[idx].image_url;
-    document.querySelectorAll('#fullscreen-slider-dots .content-page-dot').forEach((dot, i) => {
-      dot.classList.toggle('active', i === idx);
-    });
-    if(title) title.textContent = `${idx + 1} / ${data.length}`;
-    const hideNav = data.length <= 1;
-    if(prevBtn) prevBtn.style.display = hideNav ? 'none' : 'flex';
-    if(nextBtn) nextBtn.style.display = hideNav ? 'none' : 'flex';
-    if(window._zoomState && img){
-      resetZoomState(window._zoomState);
-      applyTransform(img, window._zoomState);
-    }
-  }
-
-  window.setFullscreenContentImagePage = function(index){
-    const data = window._sliderData || [];
-    if(!data.length) return;
-    window._sliderIndex = Math.max(0, Math.min(index, data.length - 1));
-    updateFullscreenView();
-  };
-
-  window.prevFullscreenImage = function(){
-    const data = window._sliderData || [];
-    if(!data.length) return;
-    window._sliderIndex = (window._sliderIndex - 1 + data.length) % data.length;
-    updateFullscreenView();
-  };
-
-  window.nextFullscreenImage = function(){
-    const data = window._sliderData || [];
-    if(!data.length) return;
-    window._sliderIndex = (window._sliderIndex + 1) % data.length;
-    updateFullscreenView();
-  };
-
-  window.openZoomModal = function(startIndex){
-    const data = window._sliderData || [];
-    if(!data.length) return;
-    const existing = document.getElementById('fullscreen-slider-overlay');
-    if(existing) existing.remove();
-
-    window._sliderIndex = typeof startIndex === 'number' ? startIndex : (window._sliderIndex || 0);
-
-    const overlay = document.createElement('div');
-    overlay.id = 'fullscreen-slider-overlay';
-    overlay.innerHTML = `
-      <div style="position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:99999; display:flex; align-items:center; justify-content:center; padding:16px; overscroll-behavior:contain;">
-        <button id="fullscreen-close-btn" type="button" style="position:absolute; top:16px; right:16px; width:44px; height:44px; border:none; border-radius:999px; background:rgba(255,255,255,.18); color:#fff; font-size:22px; cursor:pointer; z-index:3;">✕</button>
-        <button id="fullscreen-prev-btn" type="button" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:46px; height:46px; border:none; border-radius:999px; background:rgba(255,255,255,.18); color:#fff; font-size:26px; cursor:pointer; z-index:3; align-items:center; justify-content:center;">‹</button>
-        <button id="fullscreen-next-btn" type="button" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); width:46px; height:46px; border:none; border-radius:999px; background:rgba(255,255,255,.18); color:#fff; font-size:26px; cursor:pointer; z-index:3; align-items:center; justify-content:center;">›</button>
-        <div id="fullscreen-slider-surface" style="width:100%; max-width:1200px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; touch-action:none;">
-          <div id="fullscreen-slider-counter" style="color:#fff; font-size:13px; font-weight:700;">1 / ${data.length}</div>
-          <div id="fullscreen-image-viewport" style="width:100%; min-height:70vh; display:flex; align-items:center; justify-content:center; overflow:hidden;">
-            <img id="fullscreen-slider-image" src="${escapeHtml(data[window._sliderIndex].image_url)}" style="max-width:100%; max-height:76vh; object-fit:contain; border-radius:12px; user-select:none; -webkit-user-drag:none; transform-origin:center center; will-change:transform;">
-          </div>
-          <div id="fullscreen-slider-dots" style="display:flex; justify-content:center; gap:8px; flex-wrap:wrap;">
-            ${data.map((_, idx) => `<span class="content-page-dot${idx === window._sliderIndex ? ' active' : ''}" onclick="setFullscreenContentImagePage(${idx})"></span>`).join('')}
-          </div>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    document.body.style.overflow = 'hidden';
-
-    const root = overlay.firstElementChild;
-    const surface = document.getElementById('fullscreen-slider-surface');
-    const viewport = document.getElementById('fullscreen-image-viewport');
-    const img = document.getElementById('fullscreen-slider-image');
-    const close = () => {
-      document.body.style.overflow = '';
-      overlay.remove();
-      window._zoomState = null;
-    };
-
-    document.getElementById('fullscreen-close-btn').onclick = close;
-    document.getElementById('fullscreen-prev-btn').onclick = (e) => { e.stopPropagation(); window.prevFullscreenImage(); };
-    document.getElementById('fullscreen-next-btn').onclick = (e) => { e.stopPropagation(); window.nextFullscreenImage(); };
-    root.addEventListener('click', (e) => {
-      if(e.target === root) close();
-    });
-
-    const state = { scale:1, x:0, y:0, startX:0, startY:0, baseX:0, baseY:0, startDistance:0, startScale:1, isPanning:false, isPinching:false, swipeX:0, swipeY:0 };
-    window._zoomState = state;
-    applyTransform(img, state);
-    updateFullscreenView();
-
-    surface.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const delta = e.deltaY < 0 ? 0.18 : -0.18;
-      state.scale = clamp(state.scale + delta, 1, 4);
-      if(state.scale === 1){ state.x = 0; state.y = 0; }
-      applyTransform(img, state);
-    }, { passive:false });
-
-    surface.addEventListener('dblclick', (e) => {
-      e.preventDefault();
-      if(state.scale > 1){
-        resetZoomState(state);
-      } else {
-        state.scale = 2;
-      }
-      applyTransform(img, state);
-    });
-
-    surface.addEventListener('pointerdown', (e) => {
-      if(e.pointerType === 'mouse' && e.button !== 0) return;
-      if(state.scale <= 1) return;
-      state.isPanning = true;
-      state.startX = e.clientX;
-      state.startY = e.clientY;
-      state.baseX = state.x;
-      state.baseY = state.y;
-      surface.setPointerCapture?.(e.pointerId);
-    });
-
-    surface.addEventListener('pointermove', (e) => {
-      if(!state.isPanning || state.scale <= 1) return;
-      state.x = state.baseX + (e.clientX - state.startX);
-      state.y = state.baseY + (e.clientY - state.startY);
-      applyTransform(img, state);
-    });
-
-    const endPointerPan = () => { state.isPanning = false; };
-    surface.addEventListener('pointerup', endPointerPan);
-    surface.addEventListener('pointercancel', endPointerPan);
-
-    surface.addEventListener('touchstart', (e) => {
-      if(e.touches.length === 2){
-        state.isPinching = true;
-        state.startDistance = getDistance(e.touches[0], e.touches[1]);
-        state.startScale = state.scale;
-        return;
-      }
-      if(e.touches.length === 1){
-        const t = e.touches[0];
-        state.swipeX = t.clientX;
-        state.swipeY = t.clientY;
-        if(state.scale > 1){
-          state.isPanning = true;
-          state.startX = t.clientX;
-          state.startY = t.clientY;
-          state.baseX = state.x;
-          state.baseY = state.y;
-        }
-      }
-    }, { passive:true });
-
-    surface.addEventListener('touchmove', (e) => {
-      if(e.touches.length === 2){
-        e.preventDefault();
-        const nextDistance = getDistance(e.touches[0], e.touches[1]);
-        state.scale = clamp(state.startScale * (nextDistance / Math.max(state.startDistance, 1)), 1, 4);
-        if(state.scale === 1){ state.x = 0; state.y = 0; }
-        applyTransform(img, state);
-        return;
-      }
-      if(e.touches.length === 1 && state.isPanning && state.scale > 1){
-        e.preventDefault();
-        const t = e.touches[0];
-        state.x = state.baseX + (t.clientX - state.startX);
-        state.y = state.baseY + (t.clientY - state.startY);
-        applyTransform(img, state);
-      }
-    }, { passive:false });
-
-    surface.addEventListener('touchend', (e) => {
-      if(state.isPinching && e.touches.length < 2){
-        state.isPinching = false;
-      }
-      if(state.scale > 1){
-        state.isPanning = false;
-        return;
-      }
-      const t = e.changedTouches && e.changedTouches[0];
-      if(!t) return;
-      const dx = t.clientX - state.swipeX;
-      const dy = t.clientY - state.swipeY;
-      if(Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)){
-        if(dx > 0) window.prevFullscreenImage();
-        else window.nextFullscreenImage();
-      }
-    }, { passive:true });
-
-    document.addEventListener('keydown', function escHandler(e){
-      if(e.key === 'Escape'){
-        close();
-        document.removeEventListener('keydown', escHandler);
-      }
-    });
-  };
+  });
 })();
 </script>
 
