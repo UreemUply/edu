@@ -82,10 +82,7 @@
   }
 
   .size-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#f3f4f7;border:1px solid #d9dce3;font-size:12px;color:#4a4f5a;font-weight:700}
-  .thumb-size-preview{margin-top:10px;padding:12px;border:1px dashed #d9dce3;border-radius:14px;background:#fafbfe}
   .thumb-size-title{font-size:12px;color:#6f7480;margin-bottom:8px;font-weight:700}
-  .thumb-card-preview{width:100%;max-width:240px;aspect-ratio:240 / 160;border-radius:14px;overflow:hidden;border:1px solid #e3e5ec;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.04)}
-  .thumb-card-preview img{width:100%;height:100%;object-fit:cover;display:block}
   .image-card img{cursor:pointer}
 
 </style>
@@ -236,6 +233,19 @@ const BOARD_TYPE_LABELS = {
   issue: '이슈사항'
 };
 const BOARD_TYPES = Object.keys(BOARD_TYPE_LABELS);
+const ADMIN_RETURN_BASE = (() => {
+  const fromQuery = new URLSearchParams(location.search).get('admin_return') || '';
+  if (fromQuery.trim()) return fromQuery.trim();
+  try {
+    const ref = document.referrer || '';
+    if (ref) {
+      const u = new URL(ref);
+      const name = (u.pathname.split('/').pop() || '').trim();
+      if (name) return name;
+    }
+  } catch(e) {}
+  return 'admin_updated_popup.html';
+})();
 
 let currentPostId = null;
 let editingMode = 'create';
@@ -467,10 +477,6 @@ function renderThumbnail(){
         </label>
         <button class="btn btn-danger" type="button" onclick="markThumbnailDelete()">삭제</button>
       </div>
-    </div>
-    <div class="thumb-size-preview">
-      <div class="thumb-size-title">front / admin 목록 카드에서 실제로 보이는 썸네일 비율 미리보기</div>
-      <div class="thumb-card-preview"><img src="${escapeHtml(thumb.url)}" alt="thumbnail-preview" /></div>
     </div>
   `;
   const inlineInput = document.getElementById('thumbnailInputInline');
@@ -710,10 +716,10 @@ async function savePost(){
     saveStatus.className = 'status ok';
 
     const nextUrl = buildAdminUrl();
-    suppressBeforeUnload = true;
-    window.location.href = buildAdminUrl();
-    return;
     window.__editor2_last_admin_url = nextUrl;
+    suppressBeforeUnload = true;
+    window.location.replace(nextUrl);
+    return;
   } catch (error) {
     console.error(error);
     saveStatus.textContent = '저장 실패';
@@ -757,8 +763,13 @@ function buildAdminUrl(){
   const params = new URLSearchParams();
   params.set('board_type', draft.board_type);
   if (draft.category_id) params.set('category_id', String(draft.category_id));
-  if (currentPostId) params.set('open_post_id', String(currentPostId));
-  return `admin.html?${params.toString()}`;
+  if (currentPostId) {
+    params.set('open_post_id', String(currentPostId));
+    params.set('open_post_mode', 'board');
+  }
+  const base = ADMIN_RETURN_BASE || 'admin_updated_popup.html';
+  const cleanBase = base.split('#')[0].split('?')[0] || 'admin_updated_popup.html';
+  return `${cleanBase}?${params.toString()}`;
 }
 
 function goBack(){
