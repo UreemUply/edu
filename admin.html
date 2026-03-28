@@ -197,7 +197,8 @@
 <script>
 (function(){
   try {
-    if (new URLSearchParams(location.search).get('open_content_id')) {
+    const __routeParams = new URLSearchParams(location.search);
+    if (__routeParams.get('open_content_id') || __routeParams.get('open_post_id')) {
       document.documentElement.classList.add('route-direct-content');
     }
   } catch(e) {}
@@ -3787,6 +3788,21 @@ function handleSliderImageUpload(event, isFullscreen) {
     `;
   }
 
+  async function openBoardPostById(postId) {
+    if (!postId) return;
+    const { data: post, error } = await supabase.from('board_posts').select('id, board_type, category_id').eq('id', postId).single();
+    if (error || !post) {
+      if (error) console.error(error);
+      return;
+    }
+    const targetPage = Object.keys(BOARD_VIEWS).find(key => BOARD_VIEWS[key].boardType === post.board_type);
+    if (targetPage) {
+      activeBoardState[post.board_type] = post.category_id == null ? 'all' : String(post.category_id);
+      await loadBoardPage(targetPage);
+    }
+    await window.openBoardPostViewer(postId);
+  }
+
   window.openBoardPostViewer = async function(postId) {
     try {
       const { post, images } = await fetchPostDetail(postId);
@@ -3822,7 +3838,17 @@ function handleSliderImageUpload(event, isFullscreen) {
     if (BOARD_VIEWS[pageId]) loadBoardPage(pageId);
   };
 
-  document.addEventListener('DOMContentLoaded', function(){
+  document.addEventListener('DOMContentLoaded', async function(){
+    const params = new URLSearchParams(location.search);
+    const openPostId = Number(params.get('open_post_id') || 0);
+    if (openPostId) {
+      try {
+        await openBoardPostById(openPostId);
+      } finally {
+        document.body.classList.add('route-ready');
+      }
+      return;
+    }
     Object.keys(BOARD_VIEWS).forEach(pageId => loadBoardPage(pageId, true));
   });
 })();
