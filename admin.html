@@ -1886,7 +1886,7 @@
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, -1)">↑</button>
                         <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
-                        <button class="btn-admin del" data-url="${img.image_url}" onclick="deleteContentImage(${img.id}, this.dataset.url)">삭제</button>
+                        <button class="btn-admin del" data-url="${encodeURIComponent(img.image_url || '')}" onclick="deleteContentImage(${img.id}, decodeURIComponent(this.dataset.url || ''))">삭제</button>
                     </div>
                 </div>
             `).join('');
@@ -3499,6 +3499,26 @@ body.modal-open{overflow:hidden; touch-action:none;}
   </div>
 </div>
 
+<div id="content-video-form-modal" class="rec-modal-overlay" onclick="if(event.target===this) closeContentVideoModal()" style="display:none;">
+  <div class="rec-modal" onclick="event.stopPropagation()">
+    <div class="rec-modal-title" id="content-video-modal-title">참고 동영상 추가</div>
+    <input type="hidden" id="content-video-modal-id">
+    <div class="rec-form-group">
+      <label class="rec-form-label" for="content-video-modal-text">버튼 제목</label>
+      <input id="content-video-modal-text" class="rec-form-input" type="text" placeholder="예: 개통 설명 영상 보기">
+    </div>
+    <div class="rec-form-group">
+      <label class="rec-form-label" for="content-video-modal-link">유튜브 링크</label>
+      <input id="content-video-modal-link" class="rec-form-input" type="text" placeholder="https://youtu.be/... 또는 https://www.youtube.com/watch?v=...">
+      <div class="rec-form-help">watch / youtu.be / shorts 링크 모두 가능하다. 저장 시 자동으로 재생 버튼에서 사용된다.</div>
+    </div>
+    <div class="rec-modal-actions">
+      <button class="btn-admin del" type="button" onclick="closeContentVideoModal()">취소</button>
+      <button class="btn-admin edit" type="button" onclick="saveContentVideoModal()">저장</button>
+    </div>
+  </div>
+</div>
+
 <div id="youtube-video-modal" class="video-modal-overlay" onclick="if(event.target===this) closeYoutubeVideoModal()">
   <div class="video-modal" onclick="event.stopPropagation()">
     <div class="video-modal-head">
@@ -4274,57 +4294,33 @@ body.modal-open{overflow:hidden; touch-action:none;}
     return items;
   };
 
+  window.openContentVideoModal = async function(mode='add', item=null){
+    const overlay = document.getElementById('content-video-form-modal');
+    const titleInput = document.getElementById('content-video-modal-text');
+    const urlInput = document.getElementById('content-video-modal-link');
+    const idInput = document.getElementById('content-video-modal-id');
+    const titleLabel = document.getElementById('content-video-modal-title');
+    if(!overlay || !titleInput || !urlInput || !idInput || !titleLabel) return;
+
+    titleLabel.textContent = mode === 'edit' ? '참고 동영상 수정' : '참고 동영상 추가';
+    idInput.value = item?.id || '';
+    titleInput.value = item?.title || '참고 동영상';
+    urlInput.value = item?.video_url || '';
+    overlay.style.display = 'flex';
+    setTimeout(() => titleInput.focus(), 20);
+  };
+
+  window.closeContentVideoModal = function(){
+    const overlay = document.getElementById('content-video-form-modal');
+    if(overlay) overlay.style.display = 'none';
+  };
+
   window.addContentVideo = async function(){
     if(!window.currentEduContentId){
       alert('콘텐츠를 먼저 선택하세요.');
       return;
     }
-
-    const title = prompt('영상 버튼 제목을 입력하세요.', '참고 동영상');
-    if(title === null) return;
-
-    const rawUrl = prompt('유튜브 링크를 입력하세요.\nwatch / youtu.be / shorts 링크 모두 가능합니다.');
-    if(!rawUrl || !rawUrl.trim()) return;
-
-    if(!extractYoutubeId(rawUrl)){
-      alert('유효한 유튜브 링크가 아닙니다.');
-      return;
-    }
-
-    const { data: lastRow, error: lastError } = await window.supabaseClient
-      .from('edu_content_videos')
-      .select('sort_order')
-      .eq('content_id', window.currentEduContentId)
-      .order('sort_order', { ascending:false })
-      .limit(1)
-      .maybeSingle();
-
-    if(lastError){
-      console.error(lastError);
-      alert('영상 순서 조회 실패');
-      return;
-    }
-
-    const payload = {
-      content_id: window.currentEduContentId,
-      title: String(title || '').trim() || '참고 동영상',
-      video_url: String(rawUrl).trim(),
-      sort_order: (lastRow?.sort_order || 0) + 1,
-      is_visible: true
-    };
-
-    const { error } = await window.supabaseClient
-      .from('edu_content_videos')
-      .insert([payload]);
-
-    if(error){
-      console.error(error);
-      alert('동영상 추가 실패');
-      return;
-    }
-
-    await window.loadContentVideos();
-    setDirty(true);
+    await window.openContentVideoModal('add');
   };
 
   window.editContentVideo = async function(videoId){
@@ -4340,31 +4336,80 @@ body.modal-open{overflow:hidden; touch-action:none;}
       return;
     }
 
-    const nextTitle = prompt('영상 버튼 제목을 수정하세요.', data.title || '참고 동영상');
-    if(nextTitle === null) return;
+    await window.openContentVideoModal('edit', data);
+  };
 
-    const nextUrl = prompt('유튜브 링크를 수정하세요.', data.video_url || '');
-    if(!nextUrl || !nextUrl.trim()) return;
+  window.saveContentVideoModal = async function(){
+    if(!window.currentEduContentId){
+      alert('콘텐츠를 먼저 선택하세요.');
+      return;
+    }
 
-    if(!extractYoutubeId(nextUrl)){
+    const idValue = document.getElementById('content-video-modal-id')?.value || '';
+    const title = document.getElementById('content-video-modal-text')?.value || '';
+    const rawUrl = document.getElementById('content-video-modal-link')?.value || '';
+    const trimmedTitle = String(title || '').trim() || '참고 동영상';
+    const trimmedUrl = String(rawUrl || '').trim();
+
+    if(!trimmedUrl){
+      alert('유튜브 링크를 입력하세요.');
+      return;
+    }
+
+    if(!extractYoutubeId(trimmedUrl)){
       alert('유효한 유튜브 링크가 아닙니다.');
       return;
     }
 
-    const { error:updateError } = await window.supabaseClient
-      .from('edu_content_videos')
-      .update({
-        title: String(nextTitle || '').trim() || '참고 동영상',
-        video_url: String(nextUrl).trim()
-      })
-      .eq('id', videoId);
+    if(idValue){
+      const { error:updateError } = await window.supabaseClient
+        .from('edu_content_videos')
+        .update({
+          title: trimmedTitle,
+          video_url: trimmedUrl
+        })
+        .eq('id', Number(idValue));
 
-    if(updateError){
-      console.error(updateError);
-      alert('동영상 수정 실패');
-      return;
+      if(updateError){
+        console.error(updateError);
+        alert('동영상 수정 실패');
+        return;
+      }
+    } else {
+      const { data: lastRow, error: lastError } = await window.supabaseClient
+        .from('edu_content_videos')
+        .select('sort_order')
+        .eq('content_id', window.currentEduContentId)
+        .order('sort_order', { ascending:false })
+        .limit(1)
+        .maybeSingle();
+
+      if(lastError){
+        console.error(lastError);
+        alert('영상 순서 조회 실패');
+        return;
+      }
+
+      const payload = {
+        content_id: window.currentEduContentId,
+        title: trimmedTitle,
+        video_url: trimmedUrl,
+        sort_order: (lastRow?.sort_order || 0) + 1,
+        is_visible: true
+      };
+
+      const { error: insertError } = await window.supabaseClient
+        .from('edu_content_videos')
+        .insert([payload]);
+
+      if(insertError){
+        console.error(insertError);
+        alert('동영상 추가 실패');
+        return;
+      }
     }
 
+    window.closeContentVideoModal();
     await window.loadContentVideos();
     setDirty(true);
   };
@@ -4455,6 +4500,23 @@ body.modal-open{overflow:hidden; touch-action:none;}
       }
     }
   };
+
+  document.addEventListener('keydown', function(e){
+    const overlay = document.getElementById('content-video-form-modal');
+    if(!overlay || overlay.style.display !== 'flex') return;
+    if(e.key === 'Escape'){
+      e.preventDefault();
+      window.closeContentVideoModal();
+      return;
+    }
+    if(e.key === 'Enter' && !e.shiftKey){
+      const active = document.activeElement;
+      if(active && (active.id === 'content-video-modal-text' || active.id === 'content-video-modal-link')){
+        e.preventDefault();
+        window.saveContentVideoModal();
+      }
+    }
+  });
 
   window.previewContentVideo = async function(videoId){
     const { data, error } = await window.supabaseClient
@@ -5059,11 +5121,11 @@ body.modal-open{overflow:hidden; touch-action:none;}
         <div class="recommend-title">💡 추천 제안</div>
         <div class="keyword-list content-keyword-list">
           ${items.map(item => `
-<button
-  type="button"
-  class="recommend-link-btn"
-  onclick='window.handleRecommendationLink(${JSON.stringify(String(item.link_type || ''))}, ${JSON.stringify(String(item.link_value || ''))}, ${item.target_content_id ?? 'null'})'
->${esc(item.title)}</button>
+            <button
+              type="button"
+              class="recommend-link-btn"
+              onclick="window.handleRecommendationLink(${JSON.stringify(String(item.link_type || ''))}, ${JSON.stringify(String(item.link_value || ''))}, ${item.target_content_id ?? 'null'})"
+            >${esc(item.title)}</button>
           `).join('')}
         </div>
       </div>
@@ -5129,138 +5191,419 @@ body.modal-open{overflow:hidden; touch-action:none;}
 </script>
 
 
-<script id="oai-readonly-video-fix-v8">
+<script id="oai-final-image-storage-zoom-override">
 (function(){
-  function esc(str=''){
-    return String(str)
-      .replaceAll('&','&amp;')
-      .replaceAll('<','&lt;')
-      .replaceAll('>','&gt;')
-      .replaceAll('"','&quot;')
-      .replaceAll("'",'&#039;');
+  function escapeHtml(value){
+    return String(value || '').replace(/[&<>"']/g, function(ch){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];
+    });
   }
 
-  function extractYoutubeId(url=''){
-    const value = String(url || '').trim();
-    if(!value) return '';
-    if(/^[a-zA-Z0-9_-]{11}$/.test(value)) return value;
-    try{
-      const u = new URL(value);
-      if(u.hostname.includes('youtu.be')) return u.pathname.replace('/','').slice(0,11);
-      if(u.searchParams.get('v')) return u.searchParams.get('v').slice(0,11);
-      const parts = u.pathname.split('/').filter(Boolean);
-      const idx = parts.findIndex(p => ['embed','shorts','live'].includes(p));
-      if(idx !== -1 && parts[idx+1]) return parts[idx+1].slice(0,11);
-      return '';
-    }catch(e){
-      const match = value.match(/([a-zA-Z0-9_-]{11})/);
-      return match ? match[1] : '';
+  function extractEduImagePath(url){
+    const raw = String(url || '').trim();
+    if(!raw) return '';
+    const m = raw.match(/\/object\/(?:public|sign)\/edu-images\/(.+?)(?:\?|$)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  async function refreshAfterImageChange(){
+    if(typeof window.normalizeContentImageSortOrder === 'function'){
+      await window.normalizeContentImageSortOrder();
+    }
+    if(typeof window.openContentEditor === 'function'){
+      await window.openContentEditor();
     }
   }
 
-  window.fetchContentVideos = async function(contentId){
-    if(!contentId || !window.supabaseClient) return [];
+  window.deleteContentImage = async function(imageId, imageUrl){
+    if(!confirm('이 이미지를 삭제하시겠습니까?')) return;
+
+    const { data: row, error: rowError } = await window.supabaseClient
+      .from('edu_content_images')
+      .select('id, image_url, storage_path')
+      .eq('id', imageId)
+      .maybeSingle();
+
+    if(rowError){
+      console.error(rowError);
+      alert('삭제할 이미지 정보를 불러오지 못했습니다.');
+      return;
+    }
+
+    const finalUrl = row?.image_url || imageUrl || '';
+    const storagePath = row?.storage_path || extractEduImagePath(finalUrl);
+
+    if(storagePath){
+      const { error: storageError } = await window.supabaseClient
+        .storage
+        .from('edu-images')
+        .remove([storagePath]);
+
+      if(storageError){
+        console.error(storageError);
+        alert('스토리지 이미지 삭제에 실패했습니다.');
+        return;
+      }
+    }
+
+    const { error: dbError } = await window.supabaseClient
+      .from('edu_content_images')
+      .delete()
+      .eq('id', imageId);
+
+    if(dbError){
+      console.error(dbError);
+      alert('DB 이미지 삭제에 실패했습니다.');
+      return;
+    }
+
+    await refreshAfterImageChange();
+  };
+
+  function updateInlineSliderView(){
+    const data = window._sliderData || [];
+    const idx = window._sliderIndex || 0;
+    const img = document.getElementById('slider-image');
+    if(!img) return;
+    if(!data.length){
+      img.removeAttribute('src');
+      return;
+    }
+    img.src = data[idx].image_url;
+    document.querySelectorAll('#slider-dots .content-page-dot').forEach((dot, i) => {
+      dot.classList.toggle('active', i === idx);
+    });
+  }
+
+  window.setContentImagePage = function(index){
+    const data = window._sliderData || [];
+    if(!data.length) return;
+    const next = Math.max(0, Math.min(index, data.length - 1));
+    window._sliderIndex = next;
+    updateInlineSliderView();
+  };
+
+  window.prevImage = function(){
+    const data = window._sliderData || [];
+    if(!data.length) return;
+    window._sliderIndex = (window._sliderIndex - 1 + data.length) % data.length;
+    updateInlineSliderView();
+  };
+
+  window.nextImage = function(){
+    const data = window._sliderData || [];
+    if(!data.length) return;
+    window._sliderIndex = (window._sliderIndex + 1) % data.length;
+    updateInlineSliderView();
+  };
+
+  function bindInlineSliderInteractions(){
+    const surface = document.getElementById('slider-surface');
+    const img = document.getElementById('slider-image');
+    if(!surface || !img) return;
+
+    surface.style.touchAction = 'pan-y';
+    img.style.touchAction = 'pan-y';
+
+    let startX = 0;
+    let startY = 0;
+    let moved = false;
+
+    surface.addEventListener('touchstart', (e) => {
+      if(!e.touches || !e.touches.length) return;
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+      moved = false;
+    }, { passive:true });
+
+    surface.addEventListener('touchmove', (e) => {
+      if(!e.touches || !e.touches.length) return;
+      const t = e.touches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      if(Math.abs(dx) > 10 || Math.abs(dy) > 10) moved = true;
+    }, { passive:true });
+
+    surface.addEventListener('touchend', (e) => {
+      if(!e.changedTouches || !e.changedTouches.length) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      if(absX > 45 && absX > absY){
+        if(dx > 0) window.prevImage();
+        else window.nextImage();
+        return;
+      }
+
+      if(!moved){
+        window.openZoomModal(window._sliderIndex || 0);
+      }
+    }, { passive:true });
+
+    surface.addEventListener('click', () => {
+      window.openZoomModal(window._sliderIndex || 0);
+    });
+  }
+
+  window.loadContentImages = async function(){
+    const container = document.getElementById('edu-image-slider');
+    if(!container || !window.currentEduContentId) return;
+
     const { data, error } = await window.supabaseClient
-      .from('edu_content_videos')
-      .select('id, content_id, title, video_url, sort_order, is_visible')
-      .eq('content_id', contentId)
-      .eq('is_visible', true)
-      .order('sort_order', { ascending:true })
-      .order('id', { ascending:true });
+      .from('edu_content_images')
+      .select('*')
+      .eq('content_id', window.currentEduContentId)
+      .order('sort_order', { ascending:true });
 
     if(error){
-      console.error('참고 동영상 조회 실패:', error);
-      return [];
+      console.error(error);
+      container.innerHTML = '';
+      return;
     }
-    return data || [];
-  };
 
-  window.renderVideoButtons = function(items){
-    if(!items || !items.length) return '';
-    return `
-      <div class="content-video-box">
-        <div class="recommend-title">🎬 참고 동영상</div>
-        <div class="keyword-list content-keyword-list video-button-list">
-          ${items.map(item => {
-            const title = String(item.title || '참고 동영상').trim() || '참고 동영상';
-            const rawUrl = String(item.video_url || '').trim();
-            const safeTitle = title.replace(/'/g, "\\'");
-            const safeUrl = rawUrl.replace(/'/g, "\\'");
-            return `
-              <button
-                type="button"
-                class="content-video-trigger"
-                onclick="openYoutubeVideoModal('${safeTitle}', '${safeUrl}')"
-              >
-                <span>${esc(title)}</span>
-                <span>재생하기</span>
-              </button>
-            `;
-          }).join('')}
-        </div>
-        <div class="content-video-sub">버튼을 누르면 팝업창에서 유튜브 영상이 자동재생된다.</div>
+    if(!data || !data.length){
+      container.innerHTML = '';
+      window._sliderData = [];
+      window._sliderIndex = 0;
+      return;
+    }
+
+    window._sliderData = data;
+    window._sliderIndex = 0;
+
+    const dots = data.map((_, idx) => `<span class="content-page-dot${idx === 0 ? ' active' : ''}" onclick="setContentImagePage(${idx})"></span>`).join('');
+
+    container.innerHTML = `
+      <div id="slider-surface" style="background:#fff; padding:12px; border-radius:12px; cursor:zoom-in;">
+        <img id="slider-image" src="${escapeHtml(data[0].image_url)}" style="width:100%; max-height:320px; object-fit:contain; border-radius:12px; background:#f7f7f7; display:block; user-select:none; -webkit-user-drag:none;">
+        <div id="slider-dots" style="display:flex; justify-content:center; gap:8px; margin-top:12px;">${dots}</div>
       </div>
     `;
+
+    bindInlineSliderInteractions();
   };
 
-  const originalOpenContent = window.openContent;
-  window.openContent = async function(subcategoryId, title){
-    window.currentEduSubcategoryId = subcategoryId;
-    try{
-      const content = await window.ensureEduContentRecord(subcategoryId, title);
-      window.currentEduContentId = content.id;
+  function clamp(value, min, max){
+    return Math.min(max, Math.max(min, value));
+  }
 
-      const recommendations = (typeof window.fetchContentRecommendations === 'function')
-        ? await window.fetchContentRecommendations(content.id)
-        : [];
-      const videos = await window.fetchContentVideos(content.id);
+  function getDistance(t1, t2){
+    const dx = t2.clientX - t1.clientX;
+    const dy = t2.clientY - t1.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
 
-      const recommendHtml = (typeof window.renderRecommendationButtons === 'function')
-        ? window.renderRecommendationButtons(recommendations)
-        : '';
-      const videoHtml = (typeof window.renderVideoButtons === 'function')
-        ? window.renderVideoButtons(videos)
-        : '';
+  function resetZoomState(state){
+    state.scale = 1;
+    state.x = 0;
+    state.y = 0;
+  }
 
-      const btn = document.querySelector('#page-content .btn-edit-content');
-      if(btn){
-        btn.dataset.mode = 'view';
-        btn.innerText = '내용 편집하기';
-        btn.style.background = 'var(--uplus-dark)';
-      }
+  function applyTransform(img, state){
+    img.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+  }
 
-      if(typeof window.setDirty === 'function'){
-        window.setDirty(false);
-      } else if(typeof setDirty === 'function') {
-        setDirty(false);
-      } else if(typeof dirty !== 'undefined') {
-        dirty = false;
-      }
-
-      const viewHtml = `
-        <div id="edu-content-view">
-          <div id="edu-image-slider" style="margin-bottom:16px;"></div>
-          <div class="content-text-box" style="background:#fff; padding:16px; border-radius:12px; line-height:1.7; min-height:180px;">
-            ${content.content_html || '등록된 내용이 없습니다.'}
-          </div>
-          ${videoHtml}
-          ${recommendHtml}
-        </div>
-      `;
-
-      document.getElementById('page-content-dynamic-area').innerHTML = viewHtml;
-      document.getElementById('content-title').innerText = title;
-      window.goToPage('page-content', -1, title);
-      if(typeof window.loadContentImages === 'function'){
-        await window.loadContentImages();
-      }
-    }catch(e){
-      console.error(e);
-      if(typeof originalOpenContent === 'function'){
-        return originalOpenContent(subcategoryId, title);
-      }
-      alert('콘텐츠를 열 수 없습니다.');
+  function updateFullscreenView(){
+    const data = window._sliderData || [];
+    const idx = window._sliderIndex || 0;
+    const img = document.getElementById('fullscreen-slider-image');
+    const title = document.getElementById('fullscreen-slider-counter');
+    const prevBtn = document.getElementById('fullscreen-prev-btn');
+    const nextBtn = document.getElementById('fullscreen-next-btn');
+    if(!img || !data.length) return;
+    img.src = data[idx].image_url;
+    document.querySelectorAll('#fullscreen-slider-dots .content-page-dot').forEach((dot, i) => {
+      dot.classList.toggle('active', i === idx);
+    });
+    if(title) title.textContent = `${idx + 1} / ${data.length}`;
+    const hideNav = data.length <= 1;
+    if(prevBtn) prevBtn.style.display = hideNav ? 'none' : 'flex';
+    if(nextBtn) nextBtn.style.display = hideNav ? 'none' : 'flex';
+    if(window._zoomState && img){
+      resetZoomState(window._zoomState);
+      applyTransform(img, window._zoomState);
     }
+  }
+
+  window.setFullscreenContentImagePage = function(index){
+    const data = window._sliderData || [];
+    if(!data.length) return;
+    window._sliderIndex = Math.max(0, Math.min(index, data.length - 1));
+    updateFullscreenView();
+  };
+
+  window.prevFullscreenImage = function(){
+    const data = window._sliderData || [];
+    if(!data.length) return;
+    window._sliderIndex = (window._sliderIndex - 1 + data.length) % data.length;
+    updateFullscreenView();
+  };
+
+  window.nextFullscreenImage = function(){
+    const data = window._sliderData || [];
+    if(!data.length) return;
+    window._sliderIndex = (window._sliderIndex + 1) % data.length;
+    updateFullscreenView();
+  };
+
+  window.openZoomModal = function(startIndex){
+    const data = window._sliderData || [];
+    if(!data.length) return;
+    const existing = document.getElementById('fullscreen-slider-overlay');
+    if(existing) existing.remove();
+
+    window._sliderIndex = typeof startIndex === 'number' ? startIndex : (window._sliderIndex || 0);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'fullscreen-slider-overlay';
+    overlay.innerHTML = `
+      <div style="position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:99999; display:flex; align-items:center; justify-content:center; padding:16px; overscroll-behavior:contain;">
+        <button id="fullscreen-close-btn" type="button" style="position:absolute; top:16px; right:16px; width:44px; height:44px; border:none; border-radius:999px; background:rgba(255,255,255,.18); color:#fff; font-size:22px; cursor:pointer; z-index:3;">✕</button>
+        <button id="fullscreen-prev-btn" type="button" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:46px; height:46px; border:none; border-radius:999px; background:rgba(255,255,255,.18); color:#fff; font-size:26px; cursor:pointer; z-index:3; align-items:center; justify-content:center;">‹</button>
+        <button id="fullscreen-next-btn" type="button" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); width:46px; height:46px; border:none; border-radius:999px; background:rgba(255,255,255,.18); color:#fff; font-size:26px; cursor:pointer; z-index:3; align-items:center; justify-content:center;">›</button>
+        <div id="fullscreen-slider-surface" style="width:100%; max-width:1200px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; touch-action:none;">
+          <div id="fullscreen-slider-counter" style="color:#fff; font-size:13px; font-weight:700;">1 / ${data.length}</div>
+          <div id="fullscreen-image-viewport" style="width:100%; min-height:70vh; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+            <img id="fullscreen-slider-image" src="${escapeHtml(data[window._sliderIndex].image_url)}" style="max-width:100%; max-height:76vh; object-fit:contain; border-radius:12px; user-select:none; -webkit-user-drag:none; transform-origin:center center; will-change:transform;">
+          </div>
+          <div id="fullscreen-slider-dots" style="display:flex; justify-content:center; gap:8px; flex-wrap:wrap;">
+            ${data.map((_, idx) => `<span class="content-page-dot${idx === window._sliderIndex ? ' active' : ''}" onclick="setFullscreenContentImagePage(${idx})"></span>`).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+
+    const root = overlay.firstElementChild;
+    const surface = document.getElementById('fullscreen-slider-surface');
+    const viewport = document.getElementById('fullscreen-image-viewport');
+    const img = document.getElementById('fullscreen-slider-image');
+    const close = () => {
+      document.body.style.overflow = '';
+      overlay.remove();
+      window._zoomState = null;
+    };
+
+    document.getElementById('fullscreen-close-btn').onclick = close;
+    document.getElementById('fullscreen-prev-btn').onclick = (e) => { e.stopPropagation(); window.prevFullscreenImage(); };
+    document.getElementById('fullscreen-next-btn').onclick = (e) => { e.stopPropagation(); window.nextFullscreenImage(); };
+    root.addEventListener('click', (e) => {
+      if(e.target === root) close();
+    });
+
+    const state = { scale:1, x:0, y:0, startX:0, startY:0, baseX:0, baseY:0, startDistance:0, startScale:1, isPanning:false, isPinching:false, swipeX:0, swipeY:0 };
+    window._zoomState = state;
+    applyTransform(img, state);
+    updateFullscreenView();
+
+    surface.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.18 : -0.18;
+      state.scale = clamp(state.scale + delta, 1, 4);
+      if(state.scale === 1){ state.x = 0; state.y = 0; }
+      applyTransform(img, state);
+    }, { passive:false });
+
+    surface.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      if(state.scale > 1){
+        resetZoomState(state);
+      } else {
+        state.scale = 2;
+      }
+      applyTransform(img, state);
+    });
+
+    surface.addEventListener('pointerdown', (e) => {
+      if(e.pointerType === 'mouse' && e.button !== 0) return;
+      if(state.scale <= 1) return;
+      state.isPanning = true;
+      state.startX = e.clientX;
+      state.startY = e.clientY;
+      state.baseX = state.x;
+      state.baseY = state.y;
+      surface.setPointerCapture?.(e.pointerId);
+    });
+
+    surface.addEventListener('pointermove', (e) => {
+      if(!state.isPanning || state.scale <= 1) return;
+      state.x = state.baseX + (e.clientX - state.startX);
+      state.y = state.baseY + (e.clientY - state.startY);
+      applyTransform(img, state);
+    });
+
+    const endPointerPan = () => { state.isPanning = false; };
+    surface.addEventListener('pointerup', endPointerPan);
+    surface.addEventListener('pointercancel', endPointerPan);
+
+    surface.addEventListener('touchstart', (e) => {
+      if(e.touches.length === 2){
+        state.isPinching = true;
+        state.startDistance = getDistance(e.touches[0], e.touches[1]);
+        state.startScale = state.scale;
+        return;
+      }
+      if(e.touches.length === 1){
+        const t = e.touches[0];
+        state.swipeX = t.clientX;
+        state.swipeY = t.clientY;
+        if(state.scale > 1){
+          state.isPanning = true;
+          state.startX = t.clientX;
+          state.startY = t.clientY;
+          state.baseX = state.x;
+          state.baseY = state.y;
+        }
+      }
+    }, { passive:true });
+
+    surface.addEventListener('touchmove', (e) => {
+      if(e.touches.length === 2){
+        e.preventDefault();
+        const nextDistance = getDistance(e.touches[0], e.touches[1]);
+        state.scale = clamp(state.startScale * (nextDistance / Math.max(state.startDistance, 1)), 1, 4);
+        if(state.scale === 1){ state.x = 0; state.y = 0; }
+        applyTransform(img, state);
+        return;
+      }
+      if(e.touches.length === 1 && state.isPanning && state.scale > 1){
+        e.preventDefault();
+        const t = e.touches[0];
+        state.x = state.baseX + (t.clientX - state.startX);
+        state.y = state.baseY + (t.clientY - state.startY);
+        applyTransform(img, state);
+      }
+    }, { passive:false });
+
+    surface.addEventListener('touchend', (e) => {
+      if(state.isPinching && e.touches.length < 2){
+        state.isPinching = false;
+      }
+      if(state.scale > 1){
+        state.isPanning = false;
+        return;
+      }
+      const t = e.changedTouches && e.changedTouches[0];
+      if(!t) return;
+      const dx = t.clientX - state.swipeX;
+      const dy = t.clientY - state.swipeY;
+      if(Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)){
+        if(dx > 0) window.prevFullscreenImage();
+        else window.nextFullscreenImage();
+      }
+    }, { passive:true });
+
+    document.addEventListener('keydown', function escHandler(e){
+      if(e.key === 'Escape'){
+        close();
+        document.removeEventListener('keydown', escHandler);
+      }
+    });
   };
 })();
 </script>
