@@ -5691,5 +5691,521 @@ body.modal-open{overflow:hidden; touch-action:none;}
 })();
 </script>
 
+
+<style id="oai-final-draft-save-style">
+.image-pending-delete{opacity:.45;filter:grayscale(1);background:#f1f1f1 !important;position:relative;}
+.image-pending-delete::after{content:"삭제 예정";position:absolute;top:8px;left:8px;background:#666;color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:999px;z-index:2;}
+.pending-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#eef2ff;color:#4f46e5;}
+.pending-chip.delete{background:#f3f4f6;color:#666;}
+.pending-chip.new{background:#ecfdf3;color:#047857;}
+.manage-card{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #eee;border-radius:10px;margin-bottom:8px;background:#fff;position:relative;}
+.manage-card.pending-delete{background:#f5f5f5;opacity:.7;}
+.manage-card .meta{flex:1;min-width:0;}
+.manage-card .meta .sub{font-size:12px;color:#999;word-break:break-all;}
+.manage-card .actions{display:flex;gap:6px;flex-wrap:wrap;}
+</style>
+<script id="oai-final-draft-save-script">
+(function(){
+  const state = {
+    content: null,
+    images: [],
+    recommendations: [],
+    videos: [],
+    contentOptions: []
+  };
+
+  function esc(str=''){
+    return String(str)
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'",'&#039;');
+  }
+  function setDirty(flag=true){ window.eduContentDirty = !!flag; }
+  function uid(prefix='tmp'){ return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`; }
+  function ensureState(){ if(!window.eduDraftState) window.eduDraftState = JSON.parse(JSON.stringify(state)); return window.eduDraftState; }
+  function resetState(){ window.eduDraftState = JSON.parse(JSON.stringify(state)); return window.eduDraftState; }
+  function getEditorHtml(){ return document.getElementById('editor-text')?.innerHTML || ''; }
+  function extractYoutubeId(url=''){
+    const value = String(url || '').trim();
+    if(!value) return '';
+    if(/^[a-zA-Z0-9_-]{11}$/.test(value)) return value;
+    try{
+      const u = new URL(value);
+      if(u.hostname.includes('youtu.be')) return u.pathname.replace('/','').slice(0,11);
+      if(u.searchParams.get('v')) return u.searchParams.get('v').slice(0,11);
+      const parts = u.pathname.split('/').filter(Boolean);
+      const idx = parts.findIndex(p => ['embed','shorts','live'].includes(p));
+      if(idx !== -1 && parts[idx+1]) return parts[idx+1].slice(0,11);
+      return '';
+    }catch(e){
+      const match = value.match(/([a-zA-Z0-9_-]{11})/);
+      return match ? match[1] : '';
+    }
+  }
+  function imagePathFromUrl(imageUrl=''){
+    const marker = '/storage/v1/object/public/';
+    const idx = imageUrl.indexOf(marker);
+    if(idx === -1) return null;
+    const full = imageUrl.substring(idx + marker.length);
+    const slash = full.indexOf('/');
+    if(slash === -1) return null;
+    return { bucket: full.substring(0, slash), filePath: full.substring(slash + 1) };
+  }
+  async function resizeImageFile(rawFile){
+    if (!(rawFile instanceof File)) return rawFile;
+    if (!String(rawFile.type || '').startsWith('image/')) return rawFile;
+    try {
+      const bitmap = await createImageBitmap(rawFile);
+      const maxSide = 1600;
+      let { width, height } = bitmap;
+      if (Math.max(width, height) <= maxSide) return rawFile;
+      if (width > height) { height = Math.round(height * (maxSide / width)); width = maxSide; }
+      else { width = Math.round(width * (maxSide / height)); height = maxSide; }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.88));
+      const baseName = rawFile.name.includes('.') ? rawFile.name.substring(0, rawFile.name.lastIndexOf('.')) : rawFile.name;
+      return new File([blob], baseName + '.jpg', { type: 'image/jpeg' });
+    } catch(e){
+      console.error(e);
+      return rawFile;
+    }
+  }
+
+  async function fetchContentOptions(){
+    const { data, error } = await window.supabaseClient
+      .from('edu_contents')
+      .select('id, title')
+      .order('id', { ascending:true });
+    if(error){ console.error(error); return []; }
+    return data || [];
+  }
+
+  function renderImageList(){
+    const wrap = document.getElementById('draft-image-manage-list');
+    if(!wrap) return;
+    const draft = ensureState();
+    if(!draft.images.length){
+      wrap.innerHTML = '<div style="color:#888;">등록된 이미지가 없습니다.</div>';
+      return;
+    }
+    wrap.innerHTML = draft.images.map((img, idx) => {
+      const pendingDelete = !!img.pending_delete;
+      const isNew = !!img._file;
+      const badge = pendingDelete ? '<span class="pending-chip delete">삭제 예정</span>' : (isNew ? '<span class="pending-chip new">추가 예정</span>' : '');
+      return `
+        <div class="manage-card ${pendingDelete ? 'pending-delete' : ''}">
+          <div style="position:relative;">
+            <img src="${img.image_url}" style="width:88px;height:88px;object-fit:cover;border-radius:8px;background:#f6f6f6;" class="${pendingDelete ? 'image-pending-delete' : ''}">
+          </div>
+          <div class="meta">
+            <div style="font-size:12px;color:#666;display:flex;gap:8px;align-items:center;">순서: ${idx + 1} ${badge}</div>
+            <div class="sub">${esc(img.image_url || (img._file?.name || ''))}</div>
+          </div>
+          <div class="actions">
+            <button class="btn-admin edit" type="button" onclick="moveDraftImage('${img._draft_id}', -1)" ${idx===0 ? 'disabled' : ''}>↑</button>
+            <button class="btn-admin edit" type="button" onclick="moveDraftImage('${img._draft_id}', 1)" ${idx===draft.images.length-1 ? 'disabled' : ''}>↓</button>
+            <button class="btn-admin ${pendingDelete ? 'edit' : 'del'}" type="button" onclick="toggleDraftImageDelete('${img._draft_id}')">${pendingDelete ? '삭제 취소' : '삭제'}</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function renderRecommendationManageList(){
+    const wrap = document.getElementById('recommend-manage-list');
+    if(!wrap) return;
+    const draft = ensureState();
+    if(!draft.recommendations.length){
+      wrap.innerHTML = '<div style="color:#888;">등록된 추천제안이 없습니다.</div>';
+      return;
+    }
+    wrap.innerHTML = draft.recommendations.map((item, idx) => `
+      <div class="manage-card ${item.pending_delete ? 'pending-delete' : ''}">
+        <div class="meta">
+          <div style="font-weight:700;margin-bottom:4px;display:flex;gap:8px;align-items:center;">${esc(item.title || '추천제안')} ${item.pending_delete ? '<span class="pending-chip delete">삭제 예정</span>' : (item._is_new ? '<span class="pending-chip new">추가 예정</span>' : '')}</div>
+          <div style="font-size:12px;color:#666;">타입: ${item.link_type === 'internal' ? '내부콘텐츠' : '외부링크'}</div>
+          <div class="sub">${esc(item.link_type === 'internal' ? ('content #' + (item.target_content_id || '')) : (item.link_value || ''))}</div>
+        </div>
+        <div class="actions">
+          <button class="btn-admin edit" type="button" onclick="moveDraftRecommendation('${item._draft_id}', -1)" ${idx===0 ? 'disabled' : ''}>↑</button>
+          <button class="btn-admin edit" type="button" onclick="moveDraftRecommendation('${item._draft_id}', 1)" ${idx===draft.recommendations.length-1 ? 'disabled' : ''}>↓</button>
+          <button class="btn-admin edit" type="button" onclick="editRecommendationDraft('${item._draft_id}')">수정</button>
+          <button class="btn-admin ${item.pending_delete ? 'edit' : 'del'}" type="button" onclick="toggleDraftRecommendationDelete('${item._draft_id}')">${item.pending_delete ? '삭제 취소' : '삭제'}</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderVideoManageList(){
+    const wrap = document.getElementById('content-video-manage-list');
+    if(!wrap) return;
+    const draft = ensureState();
+    if(!draft.videos.length){
+      wrap.innerHTML = '<div style="color:#888;">등록된 참고 동영상이 없습니다.</div>';
+      return;
+    }
+    wrap.innerHTML = draft.videos.map((item, idx) => `
+      <div class="manage-card ${item.pending_delete ? 'pending-delete' : ''}">
+        <div class="meta">
+          <div style="font-weight:700;margin-bottom:4px;display:flex;gap:8px;align-items:center;">${esc(item.title || '참고 동영상')} ${item.pending_delete ? '<span class="pending-chip delete">삭제 예정</span>' : (item._is_new ? '<span class="pending-chip new">추가 예정</span>' : '')}</div>
+          <div class="sub">${esc(item.video_url || '')}</div>
+        </div>
+        <div class="actions">
+          <button class="btn-admin edit" type="button" onclick="moveDraftVideo('${item._draft_id}', -1)" ${idx===0 ? 'disabled' : ''}>↑</button>
+          <button class="btn-admin edit" type="button" onclick="moveDraftVideo('${item._draft_id}', 1)" ${idx===draft.videos.length-1 ? 'disabled' : ''}>↓</button>
+          <button class="btn-admin edit" type="button" onclick="editVideoDraft('${item._draft_id}')">수정</button>
+          <button class="btn-admin edit" type="button" onclick="openYoutubeVideoModal('${String(item.title || '참고 동영상').replace(/'/g, "\\'")}', '${String(item.video_url || '').replace(/'/g, "\\'")}')">미리보기</button>
+          <button class="btn-admin ${item.pending_delete ? 'edit' : 'del'}" type="button" onclick="toggleDraftVideoDelete('${item._draft_id}')">${item.pending_delete ? '삭제 취소' : '삭제'}</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderEditor(draft){
+    const videoCount = draft.videos.filter(v=>!v.pending_delete).length;
+    const editorHtml = `
+      <div style="background:#fff;padding:16px;border-radius:12px;">
+        <div style="font-weight:700;margin-bottom:12px;">내용 편집</div>
+
+        <div style="margin-bottom:20px;">
+          <div style="font-weight:700;margin-bottom:10px;">참고 이미지</div>
+          <input type="file" id="edu-image-input" accept="image/*" multiple style="display:none;" onchange="uploadContentImages(event)">
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <button class="btn-admin edit" type="button" onclick="document.getElementById('edu-image-input').click()">이미지 업로드</button>
+          </div>
+          <div id="draft-image-manage-list"></div>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <div style="font-weight:700;margin-bottom:10px;">추천 제안</div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <button class="btn-admin edit" type="button" onclick="addRecommendation()">+ 추가</button>
+          </div>
+          <div id="recommend-manage-list"></div>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <div style="font-weight:700;margin-bottom:10px;">참고 동영상</div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <button class="btn-admin edit" type="button" onclick="addContentVideo()">+ 추가</button>
+            <div class="rec-form-help" style="align-self:center;">저장 버튼을 눌러야 최종 반영된다. 현재 ${videoCount}개</div>
+          </div>
+          <div id="content-video-manage-list"></div>
+        </div>
+
+        <div style="font-weight:700;margin-bottom:10px;">본문</div>
+        <div class="content-toolbar admin-only" style="display:flex; margin-bottom:0; border-radius:12px 12px 0 0;">
+          <select onchange="execCmdFontSize(this.value)">
+            <option value="2">작게</option><option value="3" selected>기본</option><option value="4">약간크게</option><option value="5">크게</option>
+          </select>
+          <input type="color" onchange="execCmdColor(this.value)" style="padding:0; width:30px; height:24px; border:none; background:none;">
+          <button class="btn-sm btn-outline" style="font-weight:bold;" onclick="execCmdWrapper('bold')">B</button>
+          <button class="btn-sm btn-outline" style="font-style:italic;" onclick="execCmdWrapper('italic')">I</button>
+          <button class="btn-sm btn-outline" style="text-decoration:underline;" onclick="execCmdWrapper('underline')">U</button>
+          <button class="btn-sm btn-outline" onclick="setEditorAlign('left')">좌측</button>
+          <button class="btn-sm btn-outline" onclick="setEditorAlign('center')">중앙</button>
+          <button class="btn-sm btn-outline" onclick="setEditorAlign('right')">우측</button>
+          <button class="btn-sm btn-outline" onclick="insertEditorBlock('strong')">강조박스</button>
+          <button class="btn-sm btn-outline" onclick="insertEditorBlock('tip')">TIP박스</button>
+          <button class="btn-sm btn-outline" onclick="insertEditorBlock('warn')">주의박스</button>
+        </div>
+        <div id="editor-text" class="content-text-box" contenteditable="true" style="border-top-left-radius:0; border-top-right-radius:0; min-height:320px;">${draft.content?.content_html || ''}</div>
+
+        <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+          <button class="btn-admin edit" type="button" onclick="saveContent()">저장</button>
+          <button class="btn-admin del" type="button" onclick="toggleContentEdit('page-content')">취소</button>
+        </div>
+      </div>`;
+    document.getElementById('page-content-dynamic-area').innerHTML = editorHtml;
+    if(typeof setupEditorBehavior === 'function') setupEditorBehavior();
+    document.getElementById('editor-text')?.addEventListener('input', ()=>setDirty(true));
+    renderImageList();
+    renderRecommendationManageList();
+    renderVideoManageList();
+    setDirty(false);
+  }
+
+  window.openContentEditor = async function(){
+    if(!window.currentEduContentId){ alert('콘텐츠를 먼저 선택하세요.'); return; }
+    const [{data:content,error:contentError},{data:images,error:imageError},{data:recs,error:recError},{data:videos,error:videoError}, contentOptions] = await Promise.all([
+      window.supabaseClient.from('edu_contents').select('*').eq('id', window.currentEduContentId).single(),
+      window.supabaseClient.from('edu_content_images').select('*').eq('content_id', window.currentEduContentId).order('sort_order',{ascending:true}),
+      window.supabaseClient.from('edu_content_recommendations').select('*').eq('content_id', window.currentEduContentId).order('sort_order',{ascending:true}).order('id',{ascending:true}),
+      window.supabaseClient.from('edu_content_videos').select('*').eq('content_id', window.currentEduContentId).order('sort_order',{ascending:true}).order('id',{ascending:true}),
+      fetchContentOptions()
+    ]);
+    if(contentError || imageError || recError || videoError){ console.error(contentError||imageError||recError||videoError); alert('편집 데이터를 불러오지 못했습니다.'); return; }
+    const draft = resetState();
+    draft.content = content;
+    draft.contentOptions = contentOptions || [];
+    draft.images = (images||[]).map((img,idx)=>({ ...img, _draft_id: uid('img'), sort_order: idx+1, pending_delete:false }));
+    draft.recommendations = (recs||[]).map((item,idx)=>({ ...item, _draft_id: uid('rec'), sort_order: idx+1, pending_delete:false, _is_new:false }));
+    draft.videos = (videos||[]).map((item,idx)=>({ ...item, _draft_id: uid('vid'), sort_order: idx+1, pending_delete:false, _is_new:false }));
+    renderEditor(draft);
+  };
+
+  window.uploadContentImages = async function(event){
+    const files = Array.from(event.target.files || []);
+    if(!files.length) return;
+    const draft = ensureState();
+    for(const raw of files){
+      const file = await resizeImageFile(raw);
+      const objectUrl = URL.createObjectURL(file);
+      draft.images.push({
+        id: null,
+        image_url: objectUrl,
+        sort_order: draft.images.length + 1,
+        _draft_id: uid('img'),
+        _file: file,
+        _is_new: true,
+        pending_delete:false
+      });
+    }
+    event.target.value = '';
+    renderImageList();
+    setDirty(true);
+  };
+
+  window.moveDraftImage = function(draftId, direction){
+    const draft = ensureState();
+    const idx = draft.images.findIndex(i=>i._draft_id===draftId);
+    if(idx===-1) return;
+    const target = idx + Number(direction||0);
+    if(target<0 || target>=draft.images.length) return;
+    const item = draft.images.splice(idx,1)[0];
+    draft.images.splice(target,0,item);
+    draft.images.forEach((img,i)=>img.sort_order=i+1);
+    renderImageList(); setDirty(true);
+  };
+  window.toggleDraftImageDelete = function(draftId){
+    const draft = ensureState();
+    const item = draft.images.find(i=>i._draft_id===draftId);
+    if(!item) return;
+    if(item._is_new && !item.pending_delete){
+      draft.images = draft.images.filter(i=>i._draft_id!==draftId);
+    } else {
+      item.pending_delete = !item.pending_delete;
+    }
+    renderImageList(); setDirty(true);
+  };
+
+  function populateRecommendationTargetSelect(selectedId){
+    const draft = ensureState();
+    const select = document.getElementById('recommendation-modal-target-content');
+    if(!select) return;
+    const opts = ['<option value="">콘텐츠 선택</option>'].concat((draft.contentOptions||[]).filter(i=>Number(i.id)!==Number(window.currentEduContentId)).map(i=>`<option value="${i.id}" ${Number(selectedId)===Number(i.id)?'selected':''}>${esc(i.title||('콘텐츠 #'+i.id))}</option>`));
+    select.innerHTML = opts.join('');
+  }
+  function updateRecommendationTypeUI(type){
+    const isInternal = type === 'internal';
+    document.getElementById('recommendation-external-group')?.classList.toggle('rec-hidden', isInternal);
+    document.getElementById('recommendation-internal-group')?.classList.toggle('rec-hidden', !isInternal);
+  }
+  document.addEventListener('change', function(e){
+    if(e.target && e.target.name==='recommendation-link-type') updateRecommendationTypeUI(e.target.value);
+  });
+  function openRecommendationModalForDraft(item){
+    document.getElementById('recommendation-modal-id').value = item?._draft_id || '';
+    document.getElementById('recommendation-modal-text').value = item?.title || '';
+    document.getElementById('recommendation-modal-link').value = item?.link_value || '';
+    const type = item?.link_type || 'external';
+    document.querySelectorAll('input[name="recommendation-link-type"]').forEach(r=>r.checked = r.value===type);
+    populateRecommendationTargetSelect(item?.target_content_id || '');
+    updateRecommendationTypeUI(type);
+    document.getElementById('recommendation-modal-overlay').style.display = 'flex';
+    setTimeout(()=>document.getElementById('recommendation-modal-text')?.focus(),20);
+  }
+  window.addRecommendation = function(){ openRecommendationModalForDraft(null); };
+  window.editRecommendationDraft = function(draftId){
+    const draft = ensureState();
+    const item = draft.recommendations.find(i=>i._draft_id===draftId);
+    if(!item) return;
+    openRecommendationModalForDraft(item);
+  };
+  window.closeRecommendationModal = function(){ document.getElementById('recommendation-modal-overlay').style.display='none'; };
+  window.saveRecommendationModal = function(){
+    const draft = ensureState();
+    const draftId = document.getElementById('recommendation-modal-id').value;
+    const title = document.getElementById('recommendation-modal-text').value.trim();
+    const linkType = document.querySelector('input[name="recommendation-link-type"]:checked')?.value || 'external';
+    const linkValue = document.getElementById('recommendation-modal-link').value.trim();
+    const targetContentId = Number(document.getElementById('recommendation-modal-target-content').value || 0) || null;
+    if(!title){ alert('버튼 제목을 입력하세요.'); return; }
+    if(linkType==='external' && !linkValue){ alert('외부 링크를 입력하세요.'); return; }
+    if(linkType==='internal' && !targetContentId){ alert('연결할 콘텐츠를 선택하세요.'); return; }
+    const payload = {
+      title, link_type: linkType,
+      link_value: linkType==='external' ? linkValue : '',
+      target_content_id: linkType==='internal' ? targetContentId : null,
+      pending_delete:false
+    };
+    if(draftId){
+      const item = draft.recommendations.find(i=>i._draft_id===draftId);
+      if(item) Object.assign(item, payload);
+    } else {
+      draft.recommendations.push({ id:null, _draft_id: uid('rec'), _is_new:true, sort_order:draft.recommendations.length+1, ...payload });
+    }
+    draft.recommendations.forEach((i,idx)=>i.sort_order=idx+1);
+    renderRecommendationManageList();
+    window.closeRecommendationModal();
+    setDirty(true);
+  };
+  window.toggleDraftRecommendationDelete = function(draftId){
+    const draft = ensureState();
+    const item = draft.recommendations.find(i=>i._draft_id===draftId);
+    if(!item) return;
+    if(item._is_new && !item.pending_delete) draft.recommendations = draft.recommendations.filter(i=>i._draft_id!==draftId);
+    else item.pending_delete = !item.pending_delete;
+    renderRecommendationManageList(); setDirty(true);
+  };
+  window.moveDraftRecommendation = function(draftId, direction){
+    const draft = ensureState();
+    const idx = draft.recommendations.findIndex(i=>i._draft_id===draftId);
+    if(idx===-1) return; const target = idx + Number(direction||0);
+    if(target<0 || target>=draft.recommendations.length) return;
+    const item = draft.recommendations.splice(idx,1)[0];
+    draft.recommendations.splice(target,0,item);
+    draft.recommendations.forEach((i,n)=>i.sort_order=n+1);
+    renderRecommendationManageList(); setDirty(true);
+  };
+
+  function openVideoModalForDraft(item){
+    document.getElementById('content-video-modal-id').value = item?._draft_id || '';
+    document.getElementById('content-video-modal-text').value = item?.title || '';
+    document.getElementById('content-video-modal-link').value = item?.video_url || '';
+    document.getElementById('content-video-modal-title').textContent = item ? '참고 동영상 수정' : '참고 동영상 추가';
+    document.getElementById('content-video-form-modal').style.display = 'flex';
+    setTimeout(()=>document.getElementById('content-video-modal-text')?.focus(),20);
+  }
+  window.addContentVideo = function(){ openVideoModalForDraft(null); };
+  window.editVideoDraft = function(draftId){
+    const item = ensureState().videos.find(v=>v._draft_id===draftId);
+    if(!item) return; openVideoModalForDraft(item);
+  };
+  window.closeContentVideoModal = function(){ document.getElementById('content-video-form-modal').style.display='none'; };
+  window.saveContentVideoModal = function(){
+    const draft = ensureState();
+    const draftId = document.getElementById('content-video-modal-id').value;
+    const title = (document.getElementById('content-video-modal-text').value || '').trim() || '참고 동영상';
+    const videoUrl = (document.getElementById('content-video-modal-link').value || '').trim();
+    if(!videoUrl){ alert('유튜브 링크를 입력하세요.'); return; }
+    if(!extractYoutubeId(videoUrl)){ alert('유효한 유튜브 링크가 아닙니다.'); return; }
+    const payload = { title, video_url: videoUrl, pending_delete:false };
+    if(draftId){
+      const item = draft.videos.find(v=>v._draft_id===draftId); if(item) Object.assign(item,payload);
+    } else {
+      draft.videos.push({ id:null, _draft_id:uid('vid'), _is_new:true, sort_order:draft.videos.length+1, ...payload });
+    }
+    draft.videos.forEach((i,idx)=>i.sort_order=idx+1);
+    renderVideoManageList(); window.closeContentVideoModal(); setDirty(true);
+  };
+  window.toggleDraftVideoDelete = function(draftId){
+    const draft = ensureState();
+    const item = draft.videos.find(v=>v._draft_id===draftId);
+    if(!item) return;
+    if(item._is_new && !item.pending_delete) draft.videos = draft.videos.filter(v=>v._draft_id!==draftId);
+    else item.pending_delete = !item.pending_delete;
+    renderVideoManageList(); setDirty(true);
+  };
+  window.moveDraftVideo = function(draftId, direction){
+    const draft = ensureState();
+    const idx = draft.videos.findIndex(v=>v._draft_id===draftId);
+    if(idx===-1) return; const target=idx+Number(direction||0);
+    if(target<0 || target>=draft.videos.length) return;
+    const item=draft.videos.splice(idx,1)[0]; draft.videos.splice(target,0,item); draft.videos.forEach((i,n)=>i.sort_order=n+1);
+    renderVideoManageList(); setDirty(true);
+  };
+
+  async function syncRecommendations(){
+    const draft = ensureState();
+    const active = draft.recommendations.filter(i=>!i.pending_delete).map((item,idx)=>({
+      content_id: window.currentEduContentId,
+      title: String(item.title||'').trim(),
+      link_type: item.link_type || 'external',
+      link_value: item.link_type==='external' ? String(item.link_value||'').trim() : '',
+      target_content_id: item.link_type==='internal' ? Number(item.target_content_id||0) || null : null,
+      sort_order: idx+1,
+      is_visible: true
+    }));
+    const { error:delError } = await window.supabaseClient.from('edu_content_recommendations').delete().eq('content_id', window.currentEduContentId);
+    if(delError) throw delError;
+    if(active.length){ const { error:insError } = await window.supabaseClient.from('edu_content_recommendations').insert(active); if(insError) throw insError; }
+  }
+  async function syncVideos(){
+    const draft = ensureState();
+    const active = draft.videos.filter(i=>!i.pending_delete).map((item,idx)=>({
+      content_id: window.currentEduContentId,
+      title: String(item.title||'참고 동영상').trim() || '참고 동영상',
+      video_url: String(item.video_url||'').trim(),
+      sort_order: idx+1,
+      is_visible: true
+    }));
+    const { error:delError } = await window.supabaseClient.from('edu_content_videos').delete().eq('content_id', window.currentEduContentId);
+    if(delError) throw delError;
+    if(active.length){ const { error:insError } = await window.supabaseClient.from('edu_content_videos').insert(active); if(insError) throw insError; }
+  }
+  async function syncImages(){
+    const draft = ensureState();
+    const deletedExisting = draft.images.filter(i=>i.pending_delete && i.id);
+    for(const item of deletedExisting){
+      const parsed = imagePathFromUrl(String(item.image_url||''));
+      if(parsed?.bucket && parsed?.filePath){
+        const { error:storageError } = await window.supabaseClient.storage.from(parsed.bucket).remove([parsed.filePath]);
+        if(storageError) throw storageError;
+      }
+      const { error:dbError } = await window.supabaseClient.from('edu_content_images').delete().eq('id', item.id);
+      if(dbError) throw dbError;
+    }
+    let order = 1;
+    const remainExisting = draft.images.filter(i=>!i.pending_delete && i.id);
+    for(const item of remainExisting){
+      const { error:updateError } = await window.supabaseClient.from('edu_content_images').update({ sort_order: order }).eq('id', item.id);
+      if(updateError) throw updateError;
+      order += 1;
+    }
+    const newItems = draft.images.filter(i=>!i.pending_delete && i._file);
+    for(const item of newItems){
+      const file = item._file;
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const filePath = `content-${window.currentEduContentId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error:uploadError } = await window.supabaseClient.storage.from('edu-images').upload(filePath, file, { cacheControl:'3600', upsert:false });
+      if(uploadError) throw uploadError;
+      const { data:publicUrlData } = window.supabaseClient.storage.from('edu-images').getPublicUrl(filePath);
+      const imageUrl = publicUrlData?.publicUrl || '';
+      const { error:insertError } = await window.supabaseClient.from('edu_content_images').insert([{ content_id: window.currentEduContentId, image_url: imageUrl, sort_order: order, is_visible: true }]);
+      if(insertError) throw insertError;
+      order += 1;
+    }
+  }
+
+  window.saveContent = async function(){
+    const draft = ensureState();
+    try{
+      const contentHtml = getEditorHtml();
+      const { error:contentError } = await window.supabaseClient.from('edu_contents').update({
+        content_html: contentHtml,
+        title: document.getElementById('content-title')?.innerText?.trim() || draft.content?.title || '',
+        summary: draft.content?.summary || draft.content?.summary || null
+      }).eq('id', window.currentEduContentId);
+      if(contentError) throw contentError;
+      await syncImages();
+      await syncRecommendations();
+      await syncVideos();
+      alert('저장 완료');
+      setDirty(false);
+      const btn = document.querySelector('#page-content .btn-edit-content');
+      if(btn){ btn.dataset.mode='view'; btn.innerText='내용 편집하기'; btn.style.background='var(--uplus-dark)'; }
+      await window.openContent(window.currentEduSubcategoryId, document.getElementById('content-title')?.innerText || draft.content?.title || '');
+    }catch(err){
+      console.error(err);
+      alert('저장 중 오류가 발생했습니다. 콘솔을 확인하세요.');
+    }
+  };
+})();
+</script>
 </body>
 </html>
