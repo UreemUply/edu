@@ -1886,7 +1886,7 @@
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, -1)">↑</button>
                         <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
-                        <button class="btn-admin del" data-url="${encodeURIComponent(img.image_url || '')}" onclick="deleteContentImage(${img.id}, decodeURIComponent(this.dataset.url || ''))">삭제</button>
+                        <button class="btn-admin del" data-url="${encodeURIComponent(img.image_url || '')}" onclick="handleDeleteImageClick(event, ${img.id})">삭제</button>
                     </div>
                 </div>
             `).join('');
@@ -1988,7 +1988,7 @@
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, -1)">↑</button>
                         <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
-                        <button class="btn-admin del" onclick='deleteContentImage(${img.id}, ${JSON.stringify(img.image_url)})'>삭제</button>
+                        <button class="btn-admin del" data-url="${encodeURIComponent(img.image_url || '')}" onclick="handleDeleteImageClick(event, ${img.id})">삭제</button>
                     </div>
                 </div>
             `).join('');
@@ -2079,29 +2079,46 @@
             await openImageManager();
         }
 
+        function handleDeleteImageClick(event, imageId) {
+            event.stopPropagation();
+            const btn = event.currentTarget;
+            const imageUrl = decodeURIComponent((btn && btn.dataset && btn.dataset.url) || '');
+            deleteContentImage(imageId, imageUrl);
+        }
+
         async function deleteContentImage(imageId, imageUrl) {
             if (!confirm('이 이미지를 삭제하시겠습니까?')) return;
 
-            const pathMatch = imageUrl.match(/\/object\/public\/edu-images\/(.+)$/);
-            const filePath = pathMatch ? decodeURIComponent(pathMatch[1]) : null;
+            try {
+                const pathMatch = imageUrl.match(/\/object\/public\/edu-images\/(.+)$/);
+                const filePath = pathMatch ? decodeURIComponent(pathMatch[1]) : null;
 
-            const { error: dbError } = await supabaseClient
-                .from('edu_content_images')
-                .delete()
-                .eq('id', imageId);
+                if (filePath) {
+                    const { error: storageError } = await supabaseClient.storage.from('edu-images').remove([filePath]);
+                    if (storageError) {
+                        console.error(storageError);
+                        alert('스토리지 이미지 삭제 실패');
+                        return;
+                    }
+                }
 
-            if (dbError) {
-                console.error(dbError);
-                alert('이미지 삭제 실패');
-                return;
+                const { error: dbError } = await supabaseClient
+                    .from('edu_content_images')
+                    .delete()
+                    .eq('id', imageId);
+
+                if (dbError) {
+                    console.error(dbError);
+                    alert('DB 이미지 삭제 실패');
+                    return;
+                }
+
+                await normalizeContentImageSortOrder();
+                await openImageManager();
+            } catch (err) {
+                console.error(err);
+                alert('이미지 삭제 중 오류가 발생했습니다.');
             }
-
-            if (filePath) {
-                await supabaseClient.storage.from('edu-images').remove([filePath]);
-            }
-
-            await normalizeContentImageSortOrder();
-            await openImageManager();
         }
 
         async function moveContentImage(imageId, sortOrder, direction) {
@@ -2800,7 +2817,7 @@ function handleSliderImageUpload(event, isFullscreen) {
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
           <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, -1)">↑</button>
           <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
-          <button class="btn-admin del" onclick="deleteContentImage(${img.id}, ${JSON.stringify(img.image_url)})">삭제</button>
+          <button class="btn-admin del" data-url="${encodeURIComponent(img.image_url || '')}" onclick="handleDeleteImageClick(event, ${img.id})">삭제</button>
         </div>
       </div>
     `).join('');
@@ -4058,7 +4075,7 @@ body.modal-open{overflow:hidden; touch-action:none;}
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
           <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, -1)">↑</button>
           <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
-          <button class="btn-admin del" onclick="deleteContentImage(${img.id}, ${JSON.stringify(img.image_url)})">삭제</button>
+          <button class="btn-admin del" data-url="${encodeURIComponent(img.image_url || '')}" onclick="handleDeleteImageClick(event, ${img.id})">삭제</button>
         </div>
       </div>
     `).join('');
@@ -4644,7 +4661,7 @@ body.modal-open{overflow:hidden; touch-action:none;}
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
           <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, -1)">↑</button>
           <button class="btn-admin edit" onclick="moveContentImage(${img.id}, ${img.sort_order}, 1)">↓</button>
-          <button class="btn-admin del" onclick="deleteContentImage(${img.id}, ${JSON.stringify(img.image_url)})">삭제</button>
+          <button class="btn-admin del" data-url="${encodeURIComponent(img.image_url || '')}" onclick="handleDeleteImageClick(event, ${img.id})">삭제</button>
         </div>
       </div>
     `).join('');
