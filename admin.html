@@ -1796,27 +1796,96 @@ html.route-direct-content body.route-ready{visibility:visible;}
             if (sub?.category_id) await loadEduSubcategories(sub.category_id);
         }
 
-        async function deleteSubCategory(subcategoryId) {
-            if (!confirm('이 소분류를 삭제하시겠습니까?')) return;
+        function getStorageInfoFromPublicUrl(url) {
+            if (!url) return null;
+            const marker = '/storage/v1/object/public/';
+            const idx = url.indexOf(marker);
+            if (idx === -1) return null;
+            const fullPath = url.substring(idx + marker.length);
+            const firstSlash = fullPath.indexOf('/');
+            if (firstSlash === -1) return null;
+            return {
+                bucket: fullPath.substring(0, firstSlash),
+                filePath: fullPath.substring(firstSlash + 1)
+            };
+        }
 
-            const { data: sub } = await supabaseClient
-                .from('edu_subcategories')
-                .select('category_id')
-                .eq('id', subcategoryId)
-                .single();
+        async function cleanupContentImagesFromStorage(contentIds) {
+            if (!Array.isArray(contentIds) || !contentIds.length) return;
 
-            const { error } = await supabaseClient
-                .from('edu_subcategories')
-                .delete()
-                .eq('id', subcategoryId);
+            const { data: images, error } = await supabaseClient
+                .from('edu_content_images')
+                .select('id, image_url')
+                .in('content_id', contentIds);
 
             if (error) {
                 console.error(error);
-                alert('소분류 삭제 실패');
-                return;
+                throw new Error('이미지 정보를 불러오지 못했습니다.');
             }
 
-            if (sub?.category_id) await loadEduSubcategories(sub.category_id);
+            const grouped = {};
+            (images || []).forEach((img) => {
+                const info = getStorageInfoFromPublicUrl(img.image_url || '');
+                if (!info || !info.bucket || !info.filePath) return;
+                if (!grouped[info.bucket]) grouped[info.bucket] = [];
+                grouped[info.bucket].push(info.filePath);
+            });
+
+            for (const bucket of Object.keys(grouped)) {
+                const uniquePaths = Array.from(new Set(grouped[bucket]));
+                if (!uniquePaths.length) continue;
+                const { error: removeError } = await supabaseClient.storage.from(bucket).remove(uniquePaths);
+                if (removeError) {
+                    console.error(removeError);
+                    throw new Error('스토리지 이미지 삭제 실패');
+                }
+            }
+        }
+
+        async function deleteSubCategory(subcategoryId) {
+            if (!confirm('이 소분류를 삭제하시겠습니까?
+하위 content와 연결된 이미지 파일도 함께 삭제됩니다.')) return;
+
+            try {
+                const { data: sub, error: subError } = await supabaseClient
+                    .from('edu_subcategories')
+                    .select('category_id')
+                    .eq('id', subcategoryId)
+                    .single();
+
+                if (subError) throw subError;
+
+                const { data: contents, error: contentFetchError } = await supabaseClient
+                    .from('edu_contents')
+                    .select('id')
+                    .eq('subcategory_id', subcategoryId);
+
+                if (contentFetchError) throw contentFetchError;
+
+                const contentIds = (contents || []).map(row => row.id).filter(Boolean);
+                await cleanupContentImagesFromStorage(contentIds);
+
+                if (contentIds.length) {
+                    const { error: contentDeleteError } = await supabaseClient
+                        .from('edu_contents')
+                        .delete()
+                        .in('id', contentIds);
+
+                    if (contentDeleteError) throw contentDeleteError;
+                }
+
+                const { error: subDeleteError } = await supabaseClient
+                    .from('edu_subcategories')
+                    .delete()
+                    .eq('id', subcategoryId);
+
+                if (subDeleteError) throw subDeleteError;
+
+                if (sub?.category_id) await loadEduSubcategories(sub.category_id);
+            } catch (error) {
+                console.error(error);
+                alert(error?.message || '소분류 삭제 실패');
+            }
         }
 
         async function openContent(subcategoryId, title) {
