@@ -82,25 +82,11 @@
   }
 
   .size-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#f3f4f7;border:1px solid #d9dce3;font-size:12px;color:#4a4f5a;font-weight:700}
+  .thumb-size-preview{margin-top:10px;padding:12px;border:1px dashed #d9dce3;border-radius:14px;background:#fafbfe}
   .thumb-size-title{font-size:12px;color:#6f7480;margin-bottom:8px;font-weight:700}
+  .thumb-card-preview{width:100%;max-width:240px;aspect-ratio:240 / 160;border-radius:14px;overflow:hidden;border:1px solid #e3e5ec;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.04)}
+  .thumb-card-preview img{width:100%;height:100%;object-fit:cover;display:block}
   .image-card img{cursor:pointer}
-  .image-modal{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99999;padding:18px;touch-action:none}
-  .image-modal.active{display:flex}
-  .image-modal-stage{position:relative;width:min(92vw,720px);height:min(82vh,900px);display:flex;align-items:center;justify-content:center}
-  .image-modal-track{width:100%;height:100%;overflow:hidden;border-radius:18px}
-  .image-modal-slides{display:flex;height:100%;transition:transform .25s ease}
-  .image-modal-slide{min-width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#000}
-  .image-modal-slide img{max-width:100%;max-height:100%;object-fit:contain;display:block}
-  .image-modal-close{position:absolute;top:-8px;right:-8px;width:42px;height:42px;border:none;border-radius:999px;background:rgba(255,255,255,.16);color:#fff;font-size:22px;font-weight:700;cursor:pointer;z-index:3}
-  .image-modal-hotspot{position:absolute;top:0;bottom:0;width:18%;z-index:2;cursor:pointer}
-  .image-modal-hotspot.left{left:0}
-  .image-modal-hotspot.right{right:0}
-  .image-modal-arrow{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border:none;border-radius:999px;background:rgba(255,255,255,.14);color:#fff;font-size:22px;cursor:pointer;z-index:3}
-  .image-modal-arrow.left{left:10px}
-  .image-modal-arrow.right{right:10px}
-  .image-modal-dots{position:absolute;left:50%;bottom:-30px;transform:translateX(-50%);display:flex;gap:8px;z-index:3}
-  .image-modal-dot{width:8px;height:8px;border-radius:999px;background:rgba(255,255,255,.35)}
-  .image-modal-dot.active{width:24px;border-radius:999px;background:#fff}
 
 </style>
 </head>
@@ -233,19 +219,6 @@
 </div>
 
 
-<div id="imageViewerModal" class="image-modal" aria-hidden="true">
-  <div class="image-modal-stage">
-    <button class="image-modal-close" type="button" onclick="closeImageViewer()">×</button>
-    <button class="image-modal-arrow left" type="button" onclick="stepImageViewer(-1)">‹</button>
-    <button class="image-modal-arrow right" type="button" onclick="stepImageViewer(1)">›</button>
-    <div class="image-modal-hotspot left" onclick="stepImageViewer(-1)"></div>
-    <div class="image-modal-hotspot right" onclick="stepImageViewer(1)"></div>
-    <div class="image-modal-track">
-      <div id="imageViewerSlides" class="image-modal-slides"></div>
-    </div>
-    <div id="imageViewerDots" class="image-modal-dots"></div>
-  </div>
-</div>
 
 <script>
 const SUPABASE_URL = 'https://ytnxmnbctujuopbqpurl.supabase.co';
@@ -486,7 +459,7 @@ function renderThumbnail(){
   wrap.innerHTML = `
     <div class="image-card thumbnail-card ${thumb.mode === 'replace' || thumb.mode === 'add' ? 'pending-add' : ''}">
       <div class="badge ${badgeClass}">${badge}</div>
-      <img src="${escapeHtml(thumb.url)}" alt="thumbnail" onclick="openImageViewer(0, true)" />
+      <img src="${escapeHtml(thumb.url)}" alt="thumbnail" />
       <div class="actions">
         <label class="btn btn-light" style="display:inline-flex;align-items:center;">
           교체
@@ -494,6 +467,10 @@ function renderThumbnail(){
         </label>
         <button class="btn btn-danger" type="button" onclick="markThumbnailDelete()">삭제</button>
       </div>
+    </div>
+    <div class="thumb-size-preview">
+      <div class="thumb-size-title">front / admin 목록 카드에서 실제로 보이는 썸네일 비율 미리보기</div>
+      <div class="thumb-card-preview"><img src="${escapeHtml(thumb.url)}" alt="thumbnail-preview" /></div>
     </div>
   `;
   const inlineInput = document.getElementById('thumbnailInputInline');
@@ -514,7 +491,7 @@ function renderImages(){
     return `
       <div class="image-card ${pendingDelete ? 'pending-delete' : ''} ${pendingAdd ? 'pending-add' : ''}">
         <div class="badge ${pendingDelete ? 'delete' : pendingAdd ? 'add' : 'keep'}">${pendingDelete ? '삭제예정' : pendingAdd ? '새 파일' : index + 1}</div>
-        <img src="${escapeHtml(item.url)}" alt="image-${index + 1}" onclick="openImageViewer(${index})" />
+        <img src="${escapeHtml(item.url)}" alt="image-${index + 1}" />
         <div class="actions">
           <button class="btn btn-light" type="button" onclick="moveImage(${index}, -1)" ${index === 0 ? 'disabled' : ''}>앞으로</button>
           <button class="btn btn-light" type="button" onclick="moveImage(${index}, 1)" ${index === rows.length - 1 ? 'disabled' : ''}>뒤로</button>
@@ -871,80 +848,6 @@ function insertBlock(type){
   setDirty(true);
 }
 
-let imageViewerState = {
-  index: 0,
-  items: [],
-  startX: null,
-  active: false,
-  usingThumbnail: false
-};
-
-function getActiveImageItems(useThumbnail=false){
-  if (useThumbnail) {
-    const thumb = draft.thumbnail;
-    if (!thumb || !thumb.url || thumb.mode === 'empty' || thumb.mode === 'delete') return [];
-    return [{ url: thumb.url }];
-  }
-  return (draft.images || []).filter(item => item && item._status !== 'delete').map(item => ({ url: item.url }));
-}
-
-function openImageViewer(index=0, useThumbnail=false){
-  const items = getActiveImageItems(useThumbnail);
-  if (!items.length) return;
-  imageViewerState.items = items;
-  imageViewerState.index = Math.max(0, Math.min(index, items.length - 1));
-  imageViewerState.active = true;
-  imageViewerState.usingThumbnail = useThumbnail;
-  renderImageViewer();
-  const modal = document.getElementById('imageViewerModal');
-  modal.classList.add('active');
-  modal.setAttribute('aria-hidden', 'false');
-  document.body.style.overflow = 'hidden';
-}
-
-function renderImageViewer(){
-  const slides = document.getElementById('imageViewerSlides');
-  const dots = document.getElementById('imageViewerDots');
-  const items = imageViewerState.items || [];
-  slides.innerHTML = items.map(item => `<div class="image-modal-slide"><img src="${escapeHtml(item.url)}" alt="viewer-image" /></div>`).join('');
-  slides.style.transform = `translateX(-${imageViewerState.index * 100}%)`;
-  dots.innerHTML = items.map((_, idx) => `<span class="image-modal-dot ${idx === imageViewerState.index ? 'active' : ''}"></span>`).join('');
-}
-
-function closeImageViewer(){
-  imageViewerState.active = false;
-  const modal = document.getElementById('imageViewerModal');
-  modal.classList.remove('active');
-  modal.setAttribute('aria-hidden', 'true');
-  document.body.style.overflow = '';
-}
-
-function stepImageViewer(direction){
-  if (!imageViewerState.items.length) return;
-  const last = imageViewerState.items.length - 1;
-  imageViewerState.index = Math.max(0, Math.min(last, imageViewerState.index + direction));
-  renderImageViewer();
-}
-
-function handleImageViewerPointerDown(event){
-  if (!imageViewerState.active) return;
-  imageViewerState.startX = event.clientX ?? (event.touches && event.touches[0] ? event.touches[0].clientX : null);
-}
-
-function handleImageViewerPointerUp(event){
-  if (!imageViewerState.active || imageViewerState.startX == null) return;
-  const endX = event.clientX ?? (event.changedTouches && event.changedTouches[0] ? event.changedTouches[0].clientX : null);
-  if (endX == null) {
-    imageViewerState.startX = null;
-    return;
-  }
-  const delta = endX - imageViewerState.startX;
-  if (Math.abs(delta) > 40) {
-    stepImageViewer(delta < 0 ? 1 : -1);
-  }
-  imageViewerState.startX = null;
-}
-
 function escapeHtml(value){
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -955,11 +858,6 @@ function escapeHtml(value){
 }
 
 document.getElementById('editorText').addEventListener('keydown', handleEditorKeydown);
-const imageViewerModal = document.getElementById('imageViewerModal');
-imageViewerModal.addEventListener('click', (event) => { if (event.target === imageViewerModal) closeImageViewer(); });
-imageViewerModal.addEventListener('pointerdown', handleImageViewerPointerDown);
-imageViewerModal.addEventListener('pointerup', handleImageViewerPointerUp);
-window.addEventListener('keydown', (event) => { if (!imageViewerState.active) return; if (event.key === 'Escape') closeImageViewer(); if (event.key === 'ArrowLeft') stepImageViewer(-1); if (event.key === 'ArrowRight') stepImageViewer(1); });
 init();
 </script>
 </body>
