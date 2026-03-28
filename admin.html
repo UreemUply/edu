@@ -424,6 +424,23 @@ html.route-direct-content body.route-ready{visibility:visible;}
         <div id="page-content-dynamic-area"></div>
     </div>
 
+    <div id="page-edu" class="page container">
+        <div class="sub-header">
+            <div class="sub-title">신입교육</div>
+            <div class="search-mini"><span class="icon">🔍</span><input type="text" placeholder="검색" oninput="filterSearch(this)"></div>
+        </div>
+        <div class="level-tabs" id="edu-level-tabs"></div>
+        <div id="edu-level-contents"></div>
+        <button class="admin-only btn-admin add" onclick="addMainCategory()">+ 현재 레벨에 대분류 추가</button>
+    </div>
+
+    <div id="page-content" class="page container">
+        <div class="sub-header">
+            <div class="sub-title" id="content-title">교육 제목</div>
+        </div>
+        <div id="page-content-dynamic-area"></div>
+    </div>
+
     <div id="page-materials-list" class="page container">
         <div class="sub-header">
             <div class="sub-title" id="materials-title">교육자료</div>
