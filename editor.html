@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Content Editor</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --uplus-magenta:#e6007e;
+    --uplus-dark:#2f2f35;
+    --line:#e7e7ec;
+    --bg:#f7f7fb;
+    --card:#ffffff;
+    --muted:#6f7480;
+    --danger:#c53b58;
+    --pending:#f1f3f5;
+    --add:#eef8ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:#222}
+  .wrap{max-width:1100px;margin:0 auto;padding:20px}
+  .topbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap}
+  .title{font-size:24px;font-weight:800}
+  .row{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+  .col-main{flex:1 1 680px;min-width:0}
+  .col-side{width:320px;max-width:100%;display:flex;flex-direction:column;gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 6px 16px rgba(0,0,0,.04)}
+  .label{font-size:13px;color:var(--muted);margin-bottom:8px;font-weight:700}
+  input[type="text"], textarea, select{width:100%;border:1px solid #d9dce3;border-radius:12px;padding:12px;font-size:14px;background:#fff}
+  textarea{min-height:120px;resize:vertical}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .btn{border:none;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}
+  .btn-primary{background:var(--uplus-magenta);color:#fff}
+  .btn-dark{background:var(--uplus-dark);color:#fff}
+  .btn-light{background:#fff;border:1px solid #d9dce3;color:#333}
+  .btn-danger{background:#fff1f4;border:1px solid #f0b7c5;color:var(--danger)}
+  .btn-ghost{background:#f3f4f7;color:#333}
+  .editor{min-height:340px;border:1px solid #d9dce3;border-radius:14px;padding:14px;background:#fff;line-height:1.6}
+  .editor:focus{outline:2px solid rgba(230,0,126,.15);border-color:#e7b0c7}
+  .box-strong,.box-tip,.box-warn{padding:12px 14px;border-radius:12px;margin:10px 0}
+  .box-strong{border:1px solid #e7b0c7;background:#fff1f7}
+  .box-tip{border:1px solid #b9ddff;background:#eef7ff}
+  .box-warn{border:1px solid #ffd0a8;background:#fff6ed}
+  .list{display:flex;flex-direction:column;gap:10px}
+  .image-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  .image-card{border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff;position:relative}
+  .image-card img{width:100%;height:110px;object-fit:cover;border-radius:10px;background:#f2f2f2}
+  .image-card.pending-delete{background:var(--pending);opacity:.65}
+  .image-card.pending-add{background:var(--add)}
+  .badge{position:absolute;top:8px;left:8px;background:var(--uplus-dark);color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:999px}
+  .badge.delete{background:#7a7d86}
+  .badge.add{background:#1a76d2}
+  .stack{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+  .item{border:1px solid var(--line);border-radius:14px;padding:12px;background:#fff}
+  .item.pending-delete{background:var(--pending);opacity:.7}
+  .item.pending-add{background:var(--add)}
+  .item-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+  .item-title{font-weight:800}
+  .item-sub{font-size:12px;color:var(--muted);margin-top:4px;word-break:break-all}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .hint{font-size:12px;color:var(--muted)}
+  .status{font-size:13px;color:var(--muted)}
+  .hidden{display:none !important}
+  .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:9999}
+  .modal.active{display:flex}
+  .modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+  .modal-card{position:relative;width:min(560px,calc(100% - 24px));background:#fff;border-radius:18px;padding:18px;z-index:1}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .modal-title{font-size:18px;font-weight:800}
+  .spacer8{height:8px}
+  .spacer12{height:12px}
+  .footer{position:sticky;bottom:0;background:rgba(247,247,251,.92);backdrop-filter:blur(6px);padding-top:12px}
+  @media (max-width:768px){
+    .wrap{padding:14px}
+    .title{font-size:20px}
+    .editor{min-height:260px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="title">콘텐츠 편집</div>
+      <div id="contentPath" class="status">불러오는 중...</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-light" type="button" onclick="goBack()">목록으로</button>
+      <button class="btn btn-primary" type="button" onclick="saveAll()">저장</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-main">
+      <div class="card">
+        <div class="label">제목</div>
+        <input id="titleInput" type="text" placeholder="제목을 입력하세요" />
+        <div class="spacer12"></div>
+        <div class="label">본문</div>
+        <div class="toolbar">
+          <button class="btn btn-ghost" type="button" onclick="execCmd('bold')">굵게</button>
+          <button class="btn btn-ghost" type="button" onclick="insertBlock('strong')">강조</button>
+          <button class="btn btn-ghost" type="button" onclick="insertBlock('tip')">TIP</button>
+          <button class="btn btn-ghost" type="button" onclick="insertBlock('warn')">주의</button>
+        </div>
+        <div id="editorText" class="editor" contenteditable="true"></div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">
+          <div>
+            <div class="label" style="margin-bottom:2px;">이미지</div>
+            <div class="hint">삭제를 눌러도 바로 지워지지 않습니다. 저장 시 최종 반영됩니다.</div>
+          </div>
+          <label class="btn btn-dark" style="display:inline-flex;align-items:center;">
+            + 이미지 추가
+            <input id="imageInput" type="file" accept="image/*" multiple class="hidden" />
+          </label>
+        </div>
+        <div class="spacer12"></div>
+        <div id="imageGrid" class="image-grid"></div>
+      </div>
+    </div>
+
+    <div class="col-side">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+          <div>
+            <div class="label" style="margin-bottom:2px;">추천제안</div>
+            <div class="hint">편집 중에는 임시 상태로만 바뀌고 저장 시 반영됩니다.</div>
+          </div>
+          <button class="btn btn-dark" type="button" onclick="openRecommendationModal()">+ 추가</button>
+        </div>
+        <div class="spacer12"></div>
+        <div id="recommendationList" class="list"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+          <div>
+            <div class="label" style="margin-bottom:2px;">참고 동영상</div>
+            <div class="hint">유튜브 링크를 넣고 저장하면 읽기 화면에서 버튼이 노출됩니다.</div>
+          </div>
+          <button class="btn btn-dark" type="button" onclick="openVideoModal()">+ 추가</button>
+        </div>
+        <div class="spacer12"></div>
+        <div id="videoList" class="list"></div>
+      </div>
+
+      <div class="card">
+        <div class="label">저장 상태</div>
+        <div id="saveStatus" class="status">변경 사항 없음</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+      <button class="btn btn-light" type="button" onclick="goBack()">취소</button>
+      <button class="btn btn-primary" type="button" onclick="saveAll()">저장</button>
+    </div>
+  </div>
+</div>
+
+<div id="recommendationModal" class="modal">
+  <div class="modal-bg" onclick="closeRecommendationModal()"></div>
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title">추천제안</div>
+      <button class="btn btn-light" type="button" onclick="closeRecommendationModal()">닫기</button>
+    </div>
+    <div class="label">버튼 제목</div>
+    <input id="recTitle" type="text" />
+    <div class="spacer12"></div>
+    <div class="label">링크 타입</div>
+    <select id="recType" onchange="toggleRecTargetFields()">
+      <option value="external">외부 링크</option>
+      <option value="internal">내부 콘텐츠</option>
+    </select>
+    <div id="recExternalWrap">
+      <div class="spacer12"></div>
+      <div class="label">외부 링크</div>
+      <input id="recUrl" type="text" placeholder="https://..." />
+    </div>
+    <div id="recInternalWrap" class="hidden">
+      <div class="spacer12"></div>
+      <div class="label">내부 콘텐츠 선택</div>
+      <select id="recTarget"></select>
+    </div>
+    <div class="spacer12"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-light" type="button" onclick="closeRecommendationModal()">취소</button>
+      <button class="btn btn-primary" type="button" onclick="saveRecommendationDraft()">적용</button>
+    </div>
+  </div>
+</div>
+
+<div id="videoModal" class="modal">
+  <div class="modal-bg" onclick="closeVideoModal()"></div>
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title">동영상</div>
+      <button class="btn btn-light" type="button" onclick="closeVideoModal()">닫기</button>
+    </div>
+    <div class="label">버튼 제목</div>
+    <input id="videoTitle" type="text" placeholder="예: 참고 영상 1" />
+    <div class="spacer12"></div>
+    <div class="label">유튜브 링크</div>
+    <input id="videoUrl" type="text" placeholder="https://youtube.com/watch?v=..." />
+    <div class="spacer12"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-light" type="button" onclick="closeVideoModal()">취소</button>
+      <button class="btn btn-primary" type="button" onclick="saveVideoDraft()">적용</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://ytnxmnbctujuopbqpurl.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_4oBm89ecivuVF6StOBz7yg_qNBItC4z';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentContentId = null;
+let contentOptionList = [];
+let draft = {
+  title: '',
+  bodyHtml: '',
+  images: [],
+  recommendations: [],
+  videos: []
+};
+let editingRecommendationId = null;
+let editingVideoId = null;
+let dirty = false;
+
+function getContentId(){
+  const params = new URLSearchParams(location.search);
+  return Number(params.get('content_id') || 0);
+}
+function esc(v=''){ return String(v).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+function markDirty(flag=true){ dirty = flag; document.getElementById('saveStatus').textContent = dirty ? '저장되지 않은 변경 사항 있음' : '변경 사항 없음'; }
+function goBack(){
+  if(dirty && !confirm('저장되지 않은 변경 사항이 있습니다. 목록으로 돌아갈까요?')) return;
+  location.href = 'admin.html';
+}
+window.addEventListener('beforeunload', (e) => {
+  if(!dirty) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
+function execCmd(cmd){ document.execCommand(cmd, false, null); markDirty(true); }
+function insertBlock(type){
+  const classes = {strong:'box-strong', tip:'box-tip', warn:'box-warn'};
+  const labels = {strong:'강조 내용을 입력하세요', tip:'TIP 내용을 입력하세요', warn:'주의 내용을 입력하세요'};
+  const html = `<div class="${classes[type]}">${labels[type]}</div><p><br></p>`;
+  document.execCommand('insertHTML', false, html);
+  markDirty(true);
+}
+
+function parseStoragePath(imageUrl){
+  const marker = '/storage/v1/object/public/';
+  const idx = imageUrl.indexOf(marker);
+  if(idx === -1) return null;
+  const fullPath = imageUrl.substring(idx + marker.length);
+  const firstSlash = fullPath.indexOf('/');
+  if(firstSlash === -1) return null;
+  return {
+    bucket: fullPath.substring(0, firstSlash),
+    filePath: fullPath.substring(firstSlash + 1)
+  };
+}
+
+async function loadContentOptions(){
+  const { data, error } = await supabaseClient
+    .from('edu_contents')
+    .select('id,title')
+    .order('id', { ascending: true });
+  if(error){ console.error(error); return; }
+  contentOptionList = data || [];
+  const select = document.getElementById('recTarget');
+  select.innerHTML = contentOptionList
+    .filter(item => item.id !== currentContentId)
+    .map(item => `<option value="${item.id}">${esc(item.title || ('content #' + item.id))}</option>`)
+    .join('');
+}
+
+async function loadEditor(){
+  currentContentId = getContentId();
+  if(!currentContentId){
+    alert('content_id가 없습니다.');
+    location.href = 'admin.html';
+    return;
+  }
+
+  const [{ data: content, error: contentError }, { data: images, error: imageError }, { data: recs, error: recError }, { data: videos, error: videoError }] = await Promise.all([
+    supabaseClient.from('edu_contents').select('*').eq('id', currentContentId).single(),
+    supabaseClient.from('edu_content_images').select('*').eq('content_id', currentContentId).order('sort_order', { ascending: true }).order('id', { ascending: true }),
+    supabaseClient.from('edu_content_recommendations').select('*').eq('content_id', currentContentId).order('sort_order', { ascending: true }).order('id', { ascending: true }),
+    supabaseClient.from('edu_content_videos').select('*').eq('content_id', currentContentId).order('sort_order', { ascending: true }).order('id', { ascending: true })
+  ]);
+
+  if(contentError){ console.error(contentError); alert('콘텐츠를 불러오지 못했습니다.'); return; }
+  if(imageError) console.error(imageError);
+  if(recError) console.error(recError);
+  if(videoError) console.error(videoError);
+
+  draft.title = content.title || '';
+  draft.bodyHtml = content.content_html || '';
+  draft.images = (images || []).map(item => ({ ...item, _status: 'existing' }));
+  draft.recommendations = (recs || []).map(item => ({ ...item, _status: 'existing' }));
+  draft.videos = (videos || []).map(item => ({ ...item, _status: 'existing' }));
+
+  document.getElementById('titleInput').value = draft.title;
+  document.getElementById('editorText').innerHTML = draft.bodyHtml;
+  document.getElementById('contentPath').textContent = `content_id: ${currentContentId}`;
+
+  await loadContentOptions();
+  renderAll();
+  markDirty(false);
+}
+
+function renderAll(){
+  renderImages();
+  renderRecommendations();
+  renderVideos();
+}
+
+function renderImages(){
+  const grid = document.getElementById('imageGrid');
+  if(!draft.images.length){
+    grid.innerHTML = `<div class="hint">등록된 이미지가 없습니다.</div>`;
+    return;
+  }
+  grid.innerHTML = draft.images.map((img, idx) => {
+    const pendingDelete = img._status === 'delete';
+    const pendingAdd = img._status === 'new';
+    return `
+      <div class="image-card ${pendingDelete ? 'pending-delete' : ''} ${pendingAdd ? 'pending-add' : ''}">
+        ${pendingDelete ? '<div class="badge delete">삭제 예정</div>' : ''}
+        ${pendingAdd ? '<div class="badge add">추가 예정</div>' : ''}
+        <img src="${esc(img.image_url || img.preview_url || '')}" alt="">
+        <div class="stack">
+          <div class="hint">순서 ${idx + 1}</div>
+          <div class="actions">
+            <button class="btn ${pendingDelete ? 'btn-light' : 'btn-danger'}" type="button" onclick="toggleImageDelete(${idx})">${pendingDelete ? '삭제 취소' : '삭제'}</button>
+            <button class="btn btn-light" type="button" onclick="moveImage(${idx}, -1)">↑</button>
+            <button class="btn btn-light" type="button" onclick="moveImage(${idx}, 1)">↓</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleImageDelete(index){
+  const item = draft.images[index];
+  if(!item) return;
+  if(item._status === 'delete'){
+    item._status = item._originalStatus || 'existing';
+  } else {
+    item._originalStatus = item._status;
+    item._status = 'delete';
+  }
+  renderImages();
+  markDirty(true);
+}
+function moveImage(index, dir){
+  const target = index + dir;
+  if(target < 0 || target >= draft.images.length) return;
+  const temp = draft.images[index];
+  draft.images[index] = draft.images[target];
+  draft.images[target] = temp;
+  renderImages();
+  markDirty(true);
+}
+
+document.getElementById('imageInput').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
+  for(const file of files){
+    const previewUrl = URL.createObjectURL(file);
+    draft.images.push({
+      id: `new-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      image_url: previewUrl,
+      preview_url: previewUrl,
+      file,
+      _status: 'new'
+    });
+  }
+  e.target.value = '';
+  renderImages();
+  markDirty(true);
+});
+
+function renderRecommendations(){
+  const list = document.getElementById('recommendationList');
+  const visible = draft.recommendations.filter(Boolean);
+  if(!visible.length){
+    list.innerHTML = `<div class="hint">추천제안이 없습니다.</div>`;
+    return;
+  }
+  list.innerHTML = visible.map((item, idx) => {
+    const pendingDelete = item._status === 'delete';
+    const pendingAdd = item._status === 'new';
+    const typeLabel = item.link_type === 'internal' ? '내부콘텐츠' : '외부링크';
+    const valueLabel = item.link_type === 'internal'
+      ? (contentOptionList.find(v => Number(v.id) === Number(item.target_content_id))?.title || `content #${item.target_content_id || '-'}`)
+      : (item.link_value || '');
+    return `
+      <div class="item ${pendingDelete ? 'pending-delete' : ''} ${pendingAdd ? 'pending-add' : ''}">
+        <div class="item-head">
+          <div>
+            <div class="item-title">${esc(item.title || '(제목 없음)')}</div>
+            <div class="item-sub">${esc(typeLabel)} · ${esc(valueLabel)}</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-light" type="button" onclick="editRecommendation(${idx})">수정</button>
+          <button class="btn ${pendingDelete ? 'btn-light' : 'btn-danger'}" type="button" onclick="toggleRecommendationDelete(${idx})">${pendingDelete ? '삭제 취소' : '삭제'}</button>
+          <button class="btn btn-light" type="button" onclick="moveRecommendation(${idx}, -1)">↑</button>
+          <button class="btn btn-light" type="button" onclick="moveRecommendation(${idx}, 1)">↓</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+function openRecommendationModal(index = null){
+  editingRecommendationId = index;
+  const item = index === null ? null : draft.recommendations[index];
+  document.getElementById('recTitle').value = item?.title || '';
+  document.getElementById('recType').value = item?.link_type || 'external';
+  document.getElementById('recUrl').value = item?.link_value || '';
+  document.getElementById('recTarget').value = item?.target_content_id || '';
+  toggleRecTargetFields();
+  document.getElementById('recommendationModal').classList.add('active');
+}
+function closeRecommendationModal(){
+  editingRecommendationId = null;
+  document.getElementById('recommendationModal').classList.remove('active');
+}
+function toggleRecTargetFields(){
+  const type = document.getElementById('recType').value;
+  document.getElementById('recExternalWrap').classList.toggle('hidden', type !== 'external');
+  document.getElementById('recInternalWrap').classList.toggle('hidden', type !== 'internal');
+}
+function saveRecommendationDraft(){
+  const title = document.getElementById('recTitle').value.trim();
+  const linkType = document.getElementById('recType').value;
+  const linkValue = document.getElementById('recUrl').value.trim();
+  const targetContentId = Number(document.getElementById('recTarget').value || 0) || null;
+
+  if(!title){ alert('제목을 입력하세요.'); return; }
+  if(linkType === 'external' && !linkValue){ alert('외부 링크를 입력하세요.'); return; }
+  if(linkType === 'internal' && !targetContentId){ alert('내부 콘텐츠를 선택하세요.'); return; }
+
+  const payload = {
+    id: editingRecommendationId === null ? `new-${Date.now()}-${Math.random().toString(36).slice(2)}` : draft.recommendations[editingRecommendationId].id,
+    title,
+    link_type: linkType,
+    link_value: linkType === 'external' ? linkValue : '',
+    target_content_id: linkType === 'internal' ? targetContentId : null,
+    is_visible: true,
+    _status: editingRecommendationId === null ? 'new' : (draft.recommendations[editingRecommendationId]._status === 'new' ? 'new' : 'updated')
+  };
+
+  if(editingRecommendationId === null) draft.recommendations.push(payload);
+  else draft.recommendations[editingRecommendationId] = { ...draft.recommendations[editingRecommendationId], ...payload };
+
+  closeRecommendationModal();
+  renderRecommendations();
+  markDirty(true);
+}
+function editRecommendation(index){ openRecommendationModal(index); }
+function toggleRecommendationDelete(index){
+  const item = draft.recommendations[index];
+  if(!item) return;
+  if(item._status === 'delete') item._status = item._originalStatus || 'existing';
+  else { item._originalStatus = item._status; item._status = 'delete'; }
+  renderRecommendations();
+  markDirty(true);
+}
+function moveRecommendation(index, dir){
+  const target = index + dir;
+  if(target < 0 || target >= draft.recommendations.length) return;
+  const temp = draft.recommendations[index];
+  draft.recommendations[index] = draft.recommendations[target];
+  draft.recommendations[target] = temp;
+  renderRecommendations();
+  markDirty(true);
+}
+
+function renderVideos(){
+  const list = document.getElementById('videoList');
+  if(!draft.videos.length){
+    list.innerHTML = `<div class="hint">등록된 영상이 없습니다.</div>`;
+    return;
+  }
+  list.innerHTML = draft.videos.map((item, idx) => {
+    const pendingDelete = item._status === 'delete';
+    const pendingAdd = item._status === 'new';
+    return `
+      <div class="item ${pendingDelete ? 'pending-delete' : ''} ${pendingAdd ? 'pending-add' : ''}">
+        <div class="item-head">
+          <div>
+            <div class="item-title">${esc(item.title || '(제목 없음)')}</div>
+            <div class="item-sub">${esc(item.video_url || '')}</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-light" type="button" onclick="editVideo(${idx})">수정</button>
+          <button class="btn ${pendingDelete ? 'btn-light' : 'btn-danger'}" type="button" onclick="toggleVideoDelete(${idx})">${pendingDelete ? '삭제 취소' : '삭제'}</button>
+          <button class="btn btn-light" type="button" onclick="moveVideo(${idx}, -1)">↑</button>
+          <button class="btn btn-light" type="button" onclick="moveVideo(${idx}, 1)">↓</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+function openVideoModal(index = null){
+  editingVideoId = index;
+  const item = index === null ? null : draft.videos[index];
+  document.getElementById('videoTitle').value = item?.title || '';
+  document.getElementById('videoUrl').value = item?.video_url || '';
+  document.getElementById('videoModal').classList.add('active');
+}
+function closeVideoModal(){
+  editingVideoId = null;
+  document.getElementById('videoModal').classList.remove('active');
+}
+function convertToEmbedUrl(url){
+  if(!url) return '';
+  try{
+    let clean = url.trim();
+    if(clean.includes('youtube.com/embed/')) return clean.includes('autoplay=1') ? clean : (clean + (clean.includes('?') ? '&' : '?') + 'autoplay=1');
+    if(clean.includes('youtube.com/watch?v=')){
+      const id = clean.split('v=')[1].split('&')[0];
+      return `https://www.youtube.com/embed/${id}?autoplay=1`;
+    }
+    if(clean.includes('youtu.be/')){
+      const id = clean.split('youtu.be/')[1].split('?')[0];
+      return `https://www.youtube.com/embed/${id}?autoplay=1`;
+    }
+    if(clean.includes('youtube.com/shorts/')){
+      const id = clean.split('shorts/')[1].split('?')[0];
+      return `https://www.youtube.com/embed/${id}?autoplay=1`;
+    }
+    return clean;
+  }catch(_){ return url.trim(); }
+}
+function saveVideoDraft(){
+  const title = document.getElementById('videoTitle').value.trim();
+  const rawUrl = document.getElementById('videoUrl').value.trim();
+  if(!title){ alert('제목을 입력하세요.'); return; }
+  if(!rawUrl){ alert('유튜브 링크를 입력하세요.'); return; }
+  const videoUrl = convertToEmbedUrl(rawUrl);
+
+  const payload = {
+    id: editingVideoId === null ? `new-${Date.now()}-${Math.random().toString(36).slice(2)}` : draft.videos[editingVideoId].id,
+    title,
+    video_url: videoUrl,
+    is_visible: true,
+    _status: editingVideoId === null ? 'new' : (draft.videos[editingVideoId]._status === 'new' ? 'new' : 'updated')
+  };
+  if(editingVideoId === null) draft.videos.push(payload);
+  else draft.videos[editingVideoId] = { ...draft.videos[editingVideoId], ...payload };
+
+  closeVideoModal();
+  renderVideos();
+  markDirty(true);
+}
+function editVideo(index){ openVideoModal(index); }
+function toggleVideoDelete(index){
+  const item = draft.videos[index];
+  if(!item) return;
+  if(item._status === 'delete') item._status = item._originalStatus || 'existing';
+  else { item._originalStatus = item._status; item._status = 'delete'; }
+  renderVideos();
+  markDirty(true);
+}
+function moveVideo(index, dir){
+  const target = index + dir;
+  if(target < 0 || target >= draft.videos.length) return;
+  const temp = draft.videos[index];
+  draft.videos[index] = draft.videos[target];
+  draft.videos[target] = temp;
+  renderVideos();
+  markDirty(true);
+}
+
+document.getElementById('titleInput').addEventListener('input', () => markDirty(true));
+document.getElementById('editorText').addEventListener('input', () => markDirty(true));
+
+async function saveAll(){
+  try{
+    const title = document.getElementById('titleInput').value.trim();
+    const bodyHtml = document.getElementById('editorText').innerHTML;
+    if(!title){ alert('제목을 입력하세요.'); return; }
+
+    const { error: contentError } = await supabaseClient
+      .from('edu_contents')
+      .update({ title, content_html: bodyHtml })
+      .eq('id', currentContentId);
+    if(contentError) throw contentError;
+
+    // images - delete existing marked for delete
+    for(const item of draft.images.filter(v => v._status === 'delete' && String(v.id).indexOf('new-') !== 0)){
+      const parsed = parseStoragePath(item.image_url || '');
+      if(parsed){
+        const { error: storageError } = await supabaseClient.storage.from(parsed.bucket).remove([parsed.filePath]);
+        if(storageError) throw storageError;
+      }
+      const { error: dbDeleteError } = await supabaseClient.from('edu_content_images').delete().eq('id', item.id);
+      if(dbDeleteError) throw dbDeleteError;
+    }
+
+    // remove unsaved new images marked delete or save only active ones
+    const activeImages = draft.images.filter(v => v._status !== 'delete');
+    const remainingExisting = activeImages.filter(v => String(v.id).indexOf('new-') !== 0);
+    const newImages = activeImages.filter(v => String(v.id).indexOf('new-') === 0);
+
+    for(let i=0; i<newImages.length; i++){
+      const item = newImages[i];
+      const ext = (item.file?.name?.split('.').pop() || 'png').toLowerCase();
+      const filePath = `content-${currentContentId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: uploadError } = await supabaseClient.storage.from('edu-images').upload(filePath, item.file, { cacheControl: '3600', upsert: false });
+      if(uploadError) throw uploadError;
+      const { data: pub } = supabaseClient.storage.from('edu-images').getPublicUrl(filePath);
+      const imageUrl = pub?.publicUrl || '';
+      const sortOrder = remainingExisting.length + i + 1;
+      const { error: insertError } = await supabaseClient.from('edu_content_images').insert([{
+        content_id: currentContentId,
+        image_url: imageUrl,
+        sort_order: sortOrder,
+        is_visible: true
+      }]);
+      if(insertError) throw insertError;
+    }
+
+    // reorder remaining existing images
+    for(let i=0; i<remainingExisting.length; i++){
+      const item = remainingExisting[i];
+      const { error: reorderError } = await supabaseClient.from('edu_content_images').update({ sort_order: i + 1 }).eq('id', item.id);
+      if(reorderError) throw reorderError;
+    }
+
+    // recommendations: delete all, then insert active
+    const { error: recDeleteError } = await supabaseClient.from('edu_content_recommendations').delete().eq('content_id', currentContentId);
+    if(recDeleteError) throw recDeleteError;
+    const activeRecs = draft.recommendations.filter(v => v._status !== 'delete');
+    if(activeRecs.length){
+      const payload = activeRecs.map((item, idx) => ({
+        content_id: currentContentId,
+        title: item.title,
+        link_type: item.link_type,
+        link_value: item.link_type === 'external' ? (item.link_value || '') : '',
+        target_content_id: item.link_type === 'internal' ? item.target_content_id : null,
+        sort_order: idx + 1,
+        is_visible: true
+      }));
+      const { error: recInsertError } = await supabaseClient.from('edu_content_recommendations').insert(payload);
+      if(recInsertError) throw recInsertError;
+    }
+
+    // videos: delete all, then insert active
+    const { error: videoDeleteError } = await supabaseClient.from('edu_content_videos').delete().eq('content_id', currentContentId);
+    if(videoDeleteError) throw videoDeleteError;
+    const activeVideos = draft.videos.filter(v => v._status !== 'delete' && (v.video_url || '').trim());
+    if(activeVideos.length){
+      const payload = activeVideos.map((item, idx) => ({
+        content_id: currentContentId,
+        title: item.title,
+        video_url: item.video_url,
+        sort_order: idx + 1,
+        is_visible: true
+      }));
+      const { error: videoInsertError } = await supabaseClient.from('edu_content_videos').insert(payload);
+      if(videoInsertError) throw videoInsertError;
+    }
+
+    alert('저장 완료');
+    await loadEditor();
+  }catch(err){
+    console.error(err);
+    alert('저장 중 오류가 발생했습니다.');
+  }
+}
+
+loadEditor();
+</script>
+</body>
+</html>
