@@ -235,6 +235,7 @@ let draft = {
 let editingRecommendationId = null;
 let editingVideoId = null;
 let dirty = false;
+let suppressBeforeUnload = false;
 
 function getContentId(){
   const params = new URLSearchParams(location.search);
@@ -247,7 +248,7 @@ function goBack(){
   location.href = 'admin.html';
 }
 window.addEventListener('beforeunload', (e) => {
-  if(suppressBeforeUnload || !dirty) return;
+  if(!dirty) return;
   e.preventDefault();
   e.returnValue = '';
 });
@@ -678,8 +679,8 @@ async function saveAll(){
       if(videoInsertError) throw videoInsertError;
     }
 
+    dirty = false;
     suppressBeforeUnload = true;
-    markDirty(false);
     alert('저장 완료');
     location.href = 'admin.html?open_content_id=' + encodeURIComponent(currentContentId);
   }catch(err){
