@@ -99,6 +99,8 @@
         <div class="spacer12"></div>
         <div class="label">본문</div>
         <div class="toolbar">
+          <button class="btn btn-ghost" type="button" onclick="formatBlockTag('h2')">제목</button>
+          <button class="btn btn-ghost" type="button" onclick="formatBlockTag('p')">본문</button>
           <button class="btn btn-ghost" type="button" onclick="execCmd('bold')">굵게</button>
           <button class="btn btn-ghost" type="button" onclick="insertBlock('strong')">강조</button>
           <button class="btn btn-ghost" type="button" onclick="insertBlock('tip')">TIP</button>
@@ -251,6 +253,7 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 function execCmd(cmd){ document.execCommand(cmd, false, null); markDirty(true); }
+function formatBlockTag(tag){ document.execCommand('formatBlock', false, '<' + tag + '>'); markDirty(true); }
 function insertBlock(type){
   const classes = {strong:'box-strong', tip:'box-tip', warn:'box-warn'};
   const labels = {strong:'강조 내용을 입력하세요', tip:'TIP 내용을 입력하세요', warn:'주의 내용을 입력하세요'};
@@ -676,7 +679,7 @@ async function saveAll(){
     }
 
     alert('저장 완료');
-    await loadEditor();
+    location.href = 'admin.html?open_content_id=' + encodeURIComponent(currentContentId);
   }catch(err){
     console.error(err);
     alert('저장 중 오류가 발생했습니다.');
