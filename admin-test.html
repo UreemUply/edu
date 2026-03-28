@@ -3450,322 +3450,373 @@ function handleSliderImageUpload(event, isFullscreen) {
 </script>
 
 
-
-<script id="board-db-admin-patch">
+<script id="oai-board-admin-db-patch">
 (function(){
-  const BOARD_CONFIG = {
-    education_material: { pageId:'page-materials-list', tabContainerId:'material-category-tabs', cardContainerId:'material-card-container', titleId:'materials-title', displayName:'교육자료' },
-    product_material: { pageId:'page-product-list', tabContainerId:'product-category-tabs', cardContainerId:'product-card-container', titleId:null, displayName:'상품자료' },
-    issue: { pageId:'page-issues-list', tabContainerId:'issues-category-tabs', cardContainerId:'issues-card-container', titleId:null, displayName:'이슈사항' }
+  const supabase = window.supabaseClient;
+  if (!supabase) return;
+
+  const BOARD_VIEWS = {
+    'page-materials-list': {
+      boardType: 'education_material',
+      boardLabel: '교육자료',
+      title: '교육자료',
+      titleId: 'materials-title',
+      tabsId: 'material-category-tabs',
+      containerId: 'material-card-container'
+    },
+    'page-product-list': {
+      boardType: 'product_material',
+      boardLabel: '상품자료',
+      title: '상품자료',
+      tabsId: 'product-category-tabs',
+      containerId: 'product-card-container'
+    },
+    'page-issues-list': {
+      boardType: 'issue',
+      boardLabel: '이슈사항',
+      title: '이슈사항',
+      tabsId: 'issues-category-tabs',
+      containerId: 'issues-card-container'
+    }
   };
 
-  const TAB_TO_BOARD_TYPE = Object.fromEntries(Object.entries(BOARD_CONFIG).map(([k,v]) => [v.tabContainerId, k]));
+  const BOARD_BY_TABS = Object.fromEntries(Object.values(BOARD_VIEWS).map(v => [v.tabsId, v]));
+  const BOARD_BY_CONTAINER = Object.fromEntries(Object.values(BOARD_VIEWS).map(v => [v.containerId, v]));
+  const activeBoardState = {};
+  let currentViewerPost = null;
 
-  function esc(v){
-    return String(v ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
-  }
-  function cardContainerIdToBoardType(cardContainerId){
-    return Object.keys(BOARD_CONFIG).find(key => BOARD_CONFIG[key].cardContainerId === cardContainerId) || null;
-  }
-  function tabContainerIdToBoardType(tabContainerId){ return TAB_TO_BOARD_TYPE[tabContainerId] || null; }
-  function getActiveCategoryId(tabContainerId){
-    const active = document.querySelector(`#${tabContainerId} .level-tab.active`);
-    return active?.dataset?.categoryId || active?.dataset?.cat || 'all';
-  }
-
-  async function refreshBoardPageByType(boardType, preferredCategoryId){
-    const cfg = BOARD_CONFIG[boardType];
-    if(!cfg) return;
-    await loadBoardCategories(boardType, cfg.tabContainerId, cfg.cardContainerId, preferredCategoryId);
+  function escapeHtml(str = '') {
+    return String(str)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
   }
 
-  async function loadBoardCategories(boardType, tabContainerId, cardContainerId, preferredCategoryId){
-    if(!window.supabaseClient) return;
-    const tabContainer = document.getElementById(tabContainerId);
-    if(!tabContainer) return;
+  function buildPublicUrl(path) {
+    if (!path) return '';
+    try {
+      const { data } = supabase.storage.from('board-assets').getPublicUrl(path);
+      return data?.publicUrl || '';
+    } catch(e) {
+      return '';
+    }
+  }
 
-    const previousActive = preferredCategoryId || getActiveCategoryId(tabContainerId);
-    const { data, error } = await window.supabaseClient
+  async function fetchBoardCategories(boardType) {
+    const { data, error } = await supabase
       .from('board_categories')
-      .select('id,name,sort_order,is_visible,created_at')
+      .select('*')
       .eq('board_type', boardType)
       .eq('is_visible', true)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true });
-
-    if(error){
-      console.error(error);
-      alert('카테고리 조회 중 오류가 발생했습니다.');
-      return;
-    }
-
-    const categories = data || [];
-    const safeActive = categories.some(c => String(c.id) === String(previousActive)) ? String(previousActive) : 'all';
-
-    const tabsHtml = [
-      `<div class="level-tab${safeActive === 'all' ? ' active' : ''}" data-cat="all" data-category-id="all" onclick="switchCategoryTab(this, 'all', '${cardContainerId}')"><span class="tab-name">전체</span></div>`,
-      ...categories.map(cat => `
-        <div class="level-tab${String(cat.id) === safeActive ? ' active' : ''}" data-cat="${cat.id}" data-category-id="${cat.id}" data-db-id="${cat.id}" onclick="switchCategoryTab(this, '${cat.id}', '${cardContainerId}')">
-          <span class="tab-name">${esc(cat.name)}</span>
-          <span class="admin-only edit-tab" onclick="editCategoryTab(event, this)">✏️</span>
-          <span class="admin-only del-level" onclick="deleteCategoryTab(event, this, '${cardContainerId}')">X</span>
-        </div>`),
-      `<button class="admin-only btn-admin add" style="width:auto; margin:0; padding: 4px 12px; font-size:12px;" onclick="addCategoryTab('${tabContainerId}')">+ 추가</button>`
-    ].join('');
-
-    tabContainer.innerHTML = tabsHtml;
-    await loadBoardPosts(boardType, cardContainerId, safeActive);
+    if (error) throw error;
+    return data || [];
   }
 
-  async function loadBoardPosts(boardType, cardContainerId, categoryId){
-    const cardContainer = document.getElementById(cardContainerId);
-    if(!cardContainer || !window.supabaseClient) return;
-
-    let query = window.supabaseClient
+  async function fetchBoardPosts(boardType) {
+    const { data, error } = await supabase
       .from('board_posts')
-      .select('id,title,summary,thumbnail_url,thumbnail_path,category_id,is_pinned,sort_order,status,is_visible,updated_at')
+      .select('*')
       .eq('board_type', boardType)
       .eq('is_visible', true)
+      .in('status', ['draft', 'published'])
       .order('is_pinned', { ascending: false })
       .order('sort_order', { ascending: true })
-      .order('updated_at', { ascending: false });
-
-    if(categoryId && categoryId !== 'all') query = query.eq('category_id', Number(categoryId));
-
-    const { data, error } = await query;
-    if(error){
-      console.error(error);
-      cardContainer.innerHTML = '<div style="padding:16px; background:#fff; border:1px solid var(--border-light); border-radius:12px; color:#999; text-align:center;">게시글을 불러오지 못했습니다.</div>';
-      return;
-    }
-
-    const posts = data || [];
-    if(!posts.length){
-      cardContainer.innerHTML = '<div style="padding:16px; background:#fff; border:1px solid var(--border-light); border-radius:12px; color:#999; text-align:center;">등록된 자료가 없습니다.</div>';
-      return;
-    }
-
-    const tabContainerId = BOARD_CONFIG[boardType].tabContainerId;
-    cardContainer.innerHTML = posts.map(post => {
-      const thumb = post.thumbnail_url || 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="320"><rect width="100%" height="100%" fill="#eeeeee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#999999" font-size="24">NO IMAGE</text></svg>');
-      return `
-        <div class="img-card-btn list-item-search" data-category="${post.category_id || ''}" data-post-id="${post.id}" onclick="openBoardPostDetail(${post.id}, '${boardType}')" style="opacity:1;">
-          <img src="${thumb}" alt="thumbnail">
-          <div class="img-card-overlay">
-            <div class="img-card-title">${esc(post.title || '제목 없음')}</div>
-            <div class="img-card-desc">${esc(post.summary || '')}</div>
-          </div>
-          <div class="admin-only admin-controls" style="position:absolute; top:10px; right:10px;" onclick="event.stopPropagation();">
-            <button class="btn-admin edit" style="background:var(--uplus-dark);" onclick="openBoardPostEditor(${post.id})">수정</button>
-            <button class="btn-admin edit" onclick="changeCategory(event, this, '${tabContainerId}', '${cardContainerId}')">카테고리 이동</button>
-            <button class="btn-admin del" onclick="deleteBoardPost(event, ${post.id}, '${boardType}')">삭제</button>
-          </div>
-        </div>`;
-    }).join('');
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
   }
 
-  window.switchCategoryTab = async function(element, category, containerId){
+  function renderBoardTabs(cfg, categories) {
+    const wrap = document.getElementById(cfg.tabsId);
+    if (!wrap) return;
+    const activeCat = activeBoardState[cfg.boardType] || 'all';
+    let html = `
+      <div class="level-tab ${activeCat === 'all' ? 'active' : ''}" data-cat="all" onclick="switchCategoryTab(this, 'all', '${cfg.containerId}')"><span class="tab-name">전체</span></div>
+    `;
+    categories.forEach(cat => {
+      const isActive = String(activeCat) === String(cat.id);
+      html += `
+        <div class="level-tab ${isActive ? 'active' : ''}" data-cat="${cat.id}" onclick="switchCategoryTab(this, '${cat.id}', '${cfg.containerId}')">
+          <span class="tab-name">${escapeHtml(cat.name || '')}</span>
+          <span class="admin-only edit-tab" onclick="editCategoryTab(event, this)">✏️</span>
+          <span class="admin-only del-level" onclick="deleteCategoryTab(event, this, '${cfg.containerId}')">X</span>
+        </div>
+      `;
+    });
+    html += `<button class="admin-only btn-admin add" style="width:auto; margin:0; padding: 4px 12px; font-size:12px;" onclick="addCategoryTab('${cfg.tabsId}')">+ 추가</button>`;
+    wrap.innerHTML = html;
+  }
+
+  function renderBoardCards(cfg, posts) {
+    const container = document.getElementById(cfg.containerId);
+    if (!container) return;
+    if (!posts.length) {
+      container.innerHTML = '<div style="padding:16px; background:#fff; border:1px solid var(--border-light); border-radius:12px; text-align:center; color:#999; font-size:13px;">등록된 자료가 없습니다.</div>';
+      return;
+    }
+    container.innerHTML = posts.map(post => {
+      const img = escapeHtml(post.thumbnail_url || '');
+      const title = escapeHtml(post.title || '제목 없음');
+      const summary = escapeHtml(post.summary || '');
+      const cat = post.category_id == null ? 'none' : String(post.category_id);
+      return `
+        <div class="img-card-btn list-item-search" data-post-id="${post.id}" data-category="${cat}" onclick="openBoardPostViewer(${post.id})">
+          <img src="${img}" alt="cover">
+          <div class="img-card-overlay"><div class="img-card-title">${title}</div><div class="img-card-desc">${summary}</div></div>
+          <div class="admin-only admin-controls" style="position:absolute; top:10px; right:10px;" onclick="event.stopPropagation();">
+            <button class="btn-admin edit" style="background:var(--uplus-dark);" onclick="openBoardPostEditor(${post.id})">수정</button>
+            <button class="btn-admin edit" onclick="changeCategory(event, this, '${cfg.tabsId}', '${cfg.containerId}')">카테고리 이동</button>
+            <button class="btn-admin del" onclick="deleteBoardPost(event, ${post.id})">삭제</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    const activeTab = document.querySelector(`#${cfg.tabsId} .level-tab.active`) || document.querySelector(`#${cfg.tabsId} .level-tab[data-cat="all"]`);
+    if (activeTab) window.switchCategoryTab(activeTab, activeTab.dataset.cat, cfg.containerId);
+  }
+
+  async function loadBoardPage(pageId, forceAll=false) {
+    const cfg = BOARD_VIEWS[pageId];
+    if (!cfg) return;
+    try {
+      if (cfg.titleId && document.getElementById(cfg.titleId)) document.getElementById(cfg.titleId).innerText = cfg.title;
+      const [categories, posts] = await Promise.all([
+        fetchBoardCategories(cfg.boardType),
+        fetchBoardPosts(cfg.boardType)
+      ]);
+      renderBoardTabs(cfg, categories);
+      renderBoardCards(cfg, posts);
+      if (forceAll) {
+        const allTab = document.querySelector(`#${cfg.tabsId} .level-tab[data-cat="all"]`);
+        if (allTab) window.switchCategoryTab(allTab, 'all', cfg.containerId);
+      }
+    } catch (e) {
+      console.error(e);
+      const container = document.getElementById(cfg.containerId);
+      if (container) container.innerHTML = '<div style="padding:16px; background:#fff; border:1px solid var(--border-light); border-radius:12px; text-align:center; color:#d33; font-size:13px;">자료를 불러오지 못했습니다.</div>';
+    }
+  }
+
+  window.switchCategoryTab = function(element, category, containerId) {
     const tabs = element.parentElement.querySelectorAll('.level-tab');
     tabs.forEach(t => t.classList.remove('active'));
     element.classList.add('active');
-    const boardType = cardContainerIdToBoardType(containerId);
-    if(boardType) return loadBoardPosts(boardType, containerId, category);
-    const items = document.querySelectorAll(`#${containerId} .img-card-btn`);
+    const cfg = BOARD_BY_CONTAINER[containerId];
+    if (cfg) activeBoardState[cfg.boardType] = String(category);
+    const items = document.querySelectorAll('#' + containerId + ' .img-card-btn');
     items.forEach(item => {
-      item.style.display = (category === 'all' || item.dataset.category === category) ? 'block' : 'none';
+      item.style.display = (String(category) === 'all' || String(item.dataset.category) === String(category)) ? 'block' : 'none';
     });
   };
 
-  window.addCategoryTab = async function(tabContainerId){
-    const boardType = tabContainerIdToBoardType(tabContainerId);
-    if(!boardType) return alert('지원되지 않는 카테고리 영역입니다.');
+  window.addCategoryTab = async function(tabContainerId) {
+    const cfg = BOARD_BY_TABS[tabContainerId];
+    if (!cfg) return;
     const title = prompt('추가할 카테고리 이름을 입력하세요:');
-    if(!title || !title.trim()) return;
-
-    const { data: maxRow } = await window.supabaseClient
-      .from('board_categories')
-      .select('sort_order')
-      .eq('board_type', boardType)
-      .order('sort_order', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const { error } = await window.supabaseClient
-      .from('board_categories')
-      .insert([{ board_type: boardType, name: title.trim(), sort_order: (maxRow?.sort_order || 0) + 1, is_visible: true }]);
-
-    if(error){
-      console.error(error);
-      return alert(String(error.code) === '23505' ? '같은 메뉴 안에는 동일한 카테고리명을 만들 수 없습니다.' : '카테고리 추가 중 오류가 발생했습니다.');
-    }
-    await refreshBoardPageByType(boardType);
-  };
-
-  window.editCategoryTab = async function(event, btn){
-    event.stopPropagation();
-    const tab = btn.closest('.level-tab');
-    const categoryId = Number(tab?.dataset?.dbId || tab?.dataset?.categoryId || 0);
-    if(!categoryId) return alert('DB 카테고리만 수정할 수 있습니다.');
-    const newName = prompt('카테고리 이름을 수정하세요:', tab.querySelector('.tab-name')?.innerText || '');
-    if(!newName || !newName.trim()) return;
-    const boardType = tabContainerIdToBoardType(tab.parentElement.id);
-    const { error } = await window.supabaseClient.from('board_categories').update({ name: newName.trim() }).eq('id', categoryId).eq('board_type', boardType);
-    if(error){
-      console.error(error);
-      return alert(String(error.code) === '23505' ? '같은 메뉴 안에는 동일한 카테고리명을 사용할 수 없습니다.' : '카테고리 수정 중 오류가 발생했습니다.');
-    }
-    await refreshBoardPageByType(boardType, String(categoryId));
-  };
-
-  window.deleteCategoryTab = async function(event, btn, listContainerId){
-    event.stopPropagation();
-    const tab = btn.closest('.level-tab');
-    const categoryId = Number(tab?.dataset?.dbId || tab?.dataset?.categoryId || 0);
-    if(!categoryId) return alert('DB 카테고리만 삭제할 수 있습니다.');
-    const boardType = cardContainerIdToBoardType(listContainerId);
-    const categoryName = tab.querySelector('.tab-name')?.innerText || '카테고리';
-    const { count } = await window.supabaseClient.from('board_posts').select('id', { count:'exact', head:true }).eq('category_id', categoryId);
-    const msg = count && count > 0
-      ? `이 카테고리를 삭제하면 하위 콘텐츠 ${count}개와 연결 이미지가 함께 삭제되며 복구할 수 없습니다.
-정말 삭제하시겠습니까?`
-      : `카테고리 "${categoryName}"을(를) 삭제하시겠습니까?`;
-    if(!confirm(msg)) return;
+    if (!title || !title.trim()) return;
     try {
-      await removeBoardCategoryAssets(categoryId);
-      const { error } = await window.supabaseClient.from('board_categories').delete().eq('id', categoryId).eq('board_type', boardType);
-      if(error) throw error;
-      await refreshBoardPageByType(boardType);
+      const clean = title.trim();
+      const { data:lastRow } = await supabase
+        .from('board_categories')
+        .select('sort_order')
+        .eq('board_type', cfg.boardType)
+        .order('sort_order', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const nextSort = (lastRow?.sort_order || 0) + 1;
+      const { error } = await supabase.from('board_categories').insert({
+        board_type: cfg.boardType,
+        name: clean,
+        sort_order: nextSort,
+        is_visible: true
+      });
+      if (error) throw error;
+      activeBoardState[cfg.boardType] = 'all';
+      await loadBoardPage(Object.keys(BOARD_VIEWS).find(k => BOARD_VIEWS[k].tabsId === tabContainerId), true);
+      alert('카테고리가 추가되었습니다.');
     } catch (e) {
       console.error(e);
-      alert('카테고리 삭제 중 오류가 발생했습니다.');
+      if (String(e.message || '').includes('uq_board_categories_type_name')) {
+        alert('같은 메뉴 안에 동일한 카테고리명이 이미 존재합니다.');
+      } else {
+        alert('카테고리 추가에 실패했습니다.');
+      }
     }
   };
 
-  async function removeBoardCategoryAssets(categoryId){
-    const { data: posts, error } = await window.supabaseClient.from('board_posts').select('id,thumbnail_path').eq('category_id', categoryId);
-    if(error) throw error;
-    const files = (posts || []).map(p => p.thumbnail_path).filter(Boolean);
-    const postIds = (posts || []).map(p => p.id);
-    if(postIds.length){
-      const { data: images, error: imgErr } = await window.supabaseClient.from('board_post_images').select('image_path').in('post_id', postIds);
-      if(imgErr) throw imgErr;
-      (images || []).forEach(img => { if(img.image_path) files.push(img.image_path); });
-    }
-    if(files.length) await window.supabaseClient.storage.from('board-assets').remove([...new Set(files)]);
-  }
-
-  window.changeCategory = async function(event, btn, tabContainerId, listContainerId){
+  window.editCategoryTab = async function(event, btn) {
     event.stopPropagation();
-    const postId = Number(btn.closest('.img-card-btn')?.dataset?.postId || 0);
-    if(!postId) return alert('DB 게시글만 이동할 수 있습니다.');
-    const tabs = document.querySelectorAll(`#${tabContainerId} .level-tab[data-db-id]`);
-    if(!tabs.length) return alert('이동할 카테고리가 없습니다.');
-    const options = [...tabs].map((tab, idx) => ({ idx: idx + 1, id: Number(tab.dataset.dbId), name: tab.querySelector('.tab-name')?.innerText || '카테고리' }));
-    const selected = prompt('이동할 카테고리 번호를 선택하세요:
-' + options.map(o => `${o.idx}. ${o.name}`).join('
-'));
-    if(!selected) return;
-    const picked = options.find(o => o.idx === Number(selected));
-    if(!picked) return alert('잘못된 번호입니다.');
-    const { error } = await window.supabaseClient.from('board_posts').update({ category_id: picked.id }).eq('id', postId);
-    if(error){ console.error(error); return alert('카테고리 이동 중 오류가 발생했습니다.'); }
-    const active = document.querySelector(`#${tabContainerId} .level-tab.active`) || document.querySelector(`#${tabContainerId} .level-tab[data-category-id="all"]`);
-    if(active) await window.switchCategoryTab(active, getActiveCategoryId(tabContainerId), listContainerId);
-    alert('카테고리가 변경되었습니다.');
-  };
-
-  window.addCardRow = function(cardContainerId, tabContainerId){
-    const boardType = cardContainerIdToBoardType(cardContainerId);
-    if(!boardType) return alert('지원되지 않는 메뉴입니다.');
-    const url = new URL('editor2.html', location.href);
-    url.searchParams.set('board_type', boardType);
-    const activeCategoryId = getActiveCategoryId(tabContainerId);
-    if(activeCategoryId && activeCategoryId !== 'all') url.searchParams.set('category_id', activeCategoryId);
-    location.href = url.toString();
-  };
-
-  window.openBoardPostEditor = function(postId){
-    const url = new URL('editor2.html', location.href);
-    url.searchParams.set('id', postId);
-    location.href = url.toString();
-  };
-
-  window.deleteBoardPost = async function(event, postId, boardType){
-    if(event) event.stopPropagation();
-    if(!confirm('이 게시글을 삭제하시겠습니까?
-연결된 이미지도 함께 삭제되며 복구할 수 없습니다.')) return;
+    const tab = btn.closest('.level-tab');
+    const categoryId = tab?.dataset.cat;
+    if (!categoryId || categoryId === 'all') return;
+    const nameSpan = tab.querySelector('.tab-name');
+    const newName = prompt('카테고리 이름을 수정하세요:', nameSpan?.innerText || '');
+    if (!newName || !newName.trim()) return;
     try {
-      const { data: post, error: postErr } = await window.supabaseClient.from('board_posts').select('thumbnail_path').eq('id', postId).single();
-      if(postErr) throw postErr;
-      const { data: images, error: imgErr } = await window.supabaseClient.from('board_post_images').select('image_path').eq('post_id', postId);
-      if(imgErr) throw imgErr;
-      const files = [post?.thumbnail_path, ...(images || []).map(img => img.image_path)].filter(Boolean);
-      if(files.length) await window.supabaseClient.storage.from('board-assets').remove([...new Set(files)]);
-      const { error: delErr } = await window.supabaseClient.from('board_posts').delete().eq('id', postId);
-      if(delErr) throw delErr;
-      await refreshBoardPageByType(boardType);
-    } catch(e){
+      const { error } = await supabase.from('board_categories').update({ name: newName.trim() }).eq('id', categoryId);
+      if (error) throw error;
+      const cfg = BOARD_BY_TABS[tab.parentElement.id];
+      await loadBoardPage(Object.keys(BOARD_VIEWS).find(k => BOARD_VIEWS[k].tabsId === cfg.tabsId));
+    } catch (e) {
       console.error(e);
-      alert('게시글 삭제 중 오류가 발생했습니다.');
+      if (String(e.message || '').includes('uq_board_categories_type_name')) {
+        alert('같은 메뉴 안에 동일한 카테고리명이 이미 존재합니다.');
+      } else {
+        alert('카테고리 수정에 실패했습니다.');
+      }
     }
   };
 
-  window.openBoardPostDetail = async function(postId, boardType){
-    try {
-      const { data: post, error: postErr } = await window.supabaseClient.from('board_posts').select('id,title,body_html,summary').eq('id', postId).single();
-      if(postErr) throw postErr;
-      const { data: images, error: imgErr } = await window.supabaseClient.from('board_post_images').select('image_url,sort_order').eq('post_id', postId).order('sort_order', { ascending:true });
-      if(imgErr) throw imgErr;
-      const list = images || [];
-      const html = `
-        <div class="fullscreen-viewer">
-          <div class="fs-slider">${list.length ? list.map(img => `<div class="fs-item"><img src="${img.image_url}" alt="image"></div>`).join('') : `<div class="fs-item"><div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#999;background:#111;">등록된 이미지가 없습니다.</div></div>`}</div>
-        </div>
-        <div class="fs-dots">${list.map((_, idx) => `<span class="fs-dot${idx === 0 ? ' active' : ''}"></span>`).join('')}</div>
-        <div class="content-text-box">${post.body_html || (post.summary ? esc(post.summary) : '등록된 본문이 없습니다.')}</div>`;
-      document.getElementById('page-fullscreen-dynamic-area').innerHTML = html;
-      document.getElementById('viewer-title').innerText = post.title || '상세 보기';
-      const editBtn = document.querySelector('#page-fullscreen-viewer .btn-edit-content');
-      if(editBtn){
-        editBtn.innerText = 'editor2에서 수정';
-        editBtn.onclick = function(){ window.openBoardPostEditor(postId); };
-      }
-      const addImgBtn = document.querySelector('#page-fullscreen-viewer .admin-controls .btn-admin.edit');
-      if(addImgBtn) addImgBtn.style.display = 'none';
-      if(typeof window.goToPage === 'function') window.goToPage('page-fullscreen-viewer', -1, post.title || '상세 보기');
-      if(list.length){
-        if(typeof generateDots === 'function') generateDots('#page-fullscreen-dynamic-area .fs-slider', '#page-fullscreen-dynamic-area .fs-dots', 'fs-dot');
-        if(typeof bindScrollDots === 'function') bindScrollDots('#page-fullscreen-dynamic-area .fs-slider', '#page-fullscreen-dynamic-area .fs-dots', 'fs-dot');
-      }
-    } catch(e){
-      console.error(e);
-      alert('게시글을 불러오지 못했습니다.');
+  async function removeBoardAssetsByPosts(postIds) {
+    if (!postIds.length) return;
+    const { data:posts } = await supabase.from('board_posts').select('thumbnail_path').in('id', postIds);
+    const { data:images } = await supabase.from('board_post_images').select('image_path').in('post_id', postIds);
+    const paths = [];
+    (posts || []).forEach(p => { if (p.thumbnail_path) paths.push(p.thumbnail_path); });
+    (images || []).forEach(i => { if (i.image_path) paths.push(i.image_path); });
+    const uniq = [...new Set(paths.filter(Boolean))];
+    if (uniq.length) {
+      const { error } = await supabase.storage.from('board-assets').remove(uniq);
+      if (error) console.warn('storage remove warning', error);
     }
-  };
-
-  const oldGoToPage = window.goToPage;
-  if(typeof oldGoToPage === 'function'){
-    window.goToPage = function(pageId, navIndex, titleText){
-      const result = oldGoToPage.apply(this, arguments);
-      Object.entries(BOARD_CONFIG).forEach(([boardType, cfg]) => {
-        if(cfg.pageId === pageId){
-          refreshBoardPageByType(boardType);
-          if(cfg.titleId && titleText){
-            const titleEl = document.getElementById(cfg.titleId);
-            if(titleEl) titleEl.innerText = titleText;
-          }
-        }
-      });
-      return result;
-    };
   }
+
+  window.deleteCategoryTab = async function(event, btn, listContainerId) {
+    event.stopPropagation();
+    const cfg = BOARD_BY_CONTAINER[listContainerId];
+    const tab = btn.closest('.level-tab');
+    const categoryId = Number(tab?.dataset.cat || 0);
+    if (!cfg || !categoryId) return;
+    try {
+      const { data:posts, error:countErr } = await supabase.from('board_posts').select('id').eq('category_id', categoryId);
+      if (countErr) throw countErr;
+      const count = (posts || []).length;
+      const ok = confirm(`이 카테고리를 삭제하면 하위 콘텐츠 ${count}개와 연결 이미지가 함께 삭제되며 복구할 수 없습니다. 삭제하시겠습니까?`);
+      if (!ok) return;
+      await removeBoardAssetsByPosts((posts || []).map(p => p.id));
+      const { error } = await supabase.from('board_categories').delete().eq('id', categoryId);
+      if (error) throw error;
+      activeBoardState[cfg.boardType] = 'all';
+      await loadBoardPage(Object.keys(BOARD_VIEWS).find(k => BOARD_VIEWS[k].containerId === listContainerId), true);
+      alert('카테고리가 삭제되었습니다.');
+    } catch(e) {
+      console.error(e);
+      alert('카테고리 삭제에 실패했습니다.');
+    }
+  };
+
+  window.addCardRow = function(containerId, tabContainerId) {
+    const cfg = BOARD_BY_CONTAINER[containerId] || BOARD_BY_TABS[tabContainerId];
+    if (!cfg) return;
+    const activeTab = document.querySelector(`#${cfg.tabsId} .level-tab.active`);
+    const activeCat = activeTab && activeTab.dataset.cat !== 'all' ? activeTab.dataset.cat : '';
+    let url = `editor2.html?board_type=${encodeURIComponent(cfg.boardType)}`;
+    if (activeCat) url += `&category_id=${encodeURIComponent(activeCat)}`;
+    window.location.href = url;
+  };
+
+  window.openBoardPostEditor = function(postId) {
+    window.location.href = `editor2.html?id=${encodeURIComponent(postId)}`;
+  };
+
+  window.changeCategory = async function(event, btn, tabContainerId, listContainerId) {
+    event.stopPropagation();
+    const cfg = BOARD_BY_CONTAINER[listContainerId];
+    if (!cfg) return;
+    const card = btn.closest('.img-card-btn');
+    const postId = Number(card?.dataset.postId || 0);
+    const tabs = Array.from(document.querySelectorAll(`#${tabContainerId} .level-tab`)).filter(t => t.dataset.cat && t.dataset.cat !== 'all');
+    if (!postId) return;
+    if (!tabs.length) { alert('이동할 카테고리가 없습니다.'); return; }
+    let text = '이동할 카테고리 번호를 선택하세요:\n';
+    tabs.forEach((t, i) => { text += `${i+1}. ${t.querySelector('.tab-name').innerText}\n`; });
+    const sel = prompt(text);
+    const idx = Number(sel) - 1;
+    if (!(idx >= 0 && idx < tabs.length)) return;
+    const categoryId = tabs[idx].dataset.cat;
+    try {
+      const { error } = await supabase.from('board_posts').update({ category_id: Number(categoryId) }).eq('id', postId);
+      if (error) throw error;
+      await loadBoardPage(Object.keys(BOARD_VIEWS).find(k => BOARD_VIEWS[k].containerId === listContainerId));
+    } catch(e) {
+      console.error(e);
+      alert('카테고리 이동에 실패했습니다.');
+    }
+  };
+
+  window.deleteBoardPost = async function(event, postId) {
+    event.stopPropagation();
+    const ok = confirm('이 자료를 삭제하시겠습니까? 연결된 이미지도 함께 삭제되며 복구할 수 없습니다.');
+    if (!ok) return;
+    try {
+      await removeBoardAssetsByPosts([postId]);
+      const { error } = await supabase.from('board_posts').delete().eq('id', postId);
+      if (error) throw error;
+      const activePage = document.querySelector('.page.active')?.id;
+      if (activePage && BOARD_VIEWS[activePage]) await loadBoardPage(activePage);
+      alert('자료가 삭제되었습니다.');
+    } catch(e) {
+      console.error(e);
+      alert('자료 삭제에 실패했습니다.');
+    }
+  };
+
+  async function fetchPostDetail(postId) {
+    const { data: post, error: postErr } = await supabase.from('board_posts').select('*').eq('id', postId).single();
+    if (postErr) throw postErr;
+    const { data: images, error: imgErr } = await supabase.from('board_post_images').select('*').eq('post_id', postId).order('sort_order', { ascending: true });
+    if (imgErr) throw imgErr;
+    return { post, images: images || [] };
+  }
+
+  function renderPostDetail(post, images) {
+    const sliderItems = (images || []).length
+      ? images.map(img => `<div class="fs-item"><img src="${escapeHtml(img.image_url || '')}" alt="img"></div>`).join('')
+      : `<div class="fs-item" style="color:#fff; font-size:14px;">등록된 이미지가 없습니다.</div>`;
+    return `
+      <div class="fullscreen-viewer">
+        <div class="fs-slider fs-slider">${sliderItems}</div>
+      </div>
+      <div class="fs-dots fs-dots"></div>
+      <div class="content-text-box">${post.body_html || '등록된 내용이 없습니다.'}</div>
+    `;
+  }
+
+  window.openBoardPostViewer = async function(postId) {
+    try {
+      const { post, images } = await fetchPostDetail(postId);
+      currentViewerPost = post;
+      document.getElementById('viewer-title').innerText = post.title || '상세 보기';
+      document.getElementById('page-fullscreen-dynamic-area').innerHTML = renderPostDetail(post, images);
+      const editBtn = document.querySelector('#page-fullscreen-viewer .admin-controls .btn-admin.edit[style*="var(--uplus-dark)"]') || document.querySelector('#page-fullscreen-viewer .btn-edit-content');
+      const controls = document.querySelector('#page-fullscreen-viewer .admin-controls');
+      if (controls) {
+        controls.innerHTML = `<button class="btn-admin edit" style="background:var(--uplus-dark); padding:6px 12px;" onclick="openBoardPostEditor(${post.id})">editor2에서 편집하기</button>`;
+      }
+      if (typeof generateDots === 'function') generateDots('#page-fullscreen-dynamic-area .fs-slider', '#page-fullscreen-dynamic-area .fs-dots', 'fs-dot');
+      if (typeof bindScrollDots === 'function') bindScrollDots('#page-fullscreen-dynamic-area .fs-slider', '#page-fullscreen-dynamic-area .fs-dots', 'fs-dot');
+      window.goToPage('page-fullscreen-viewer', -1, post.title || '상세 보기');
+    } catch (e) {
+      console.error(e);
+      alert('자료를 불러오지 못했습니다.');
+    }
+  };
+
+  const originalGoToPage = window.goToPage;
+  window.goToPage = function(pageId, navIndex, titleText) {
+    originalGoToPage(pageId, navIndex, titleText);
+    if (BOARD_VIEWS[pageId]) loadBoardPage(pageId);
+  };
 
   document.addEventListener('DOMContentLoaded', function(){
-    Promise.all(Object.keys(BOARD_CONFIG).map(boardType => refreshBoardPageByType(boardType))).catch(console.error);
+    Object.keys(BOARD_VIEWS).forEach(pageId => loadBoardPage(pageId, true));
   });
 })();
 </script>
-
 
 </body>
 </html>
