@@ -55,6 +55,18 @@
       padding: 6px 14px;
       border-radius: 20px;
       border: 1px solid var(--border-light);
+      cursor: pointer;
+    }
+
+    .btn-sm {
+      background: #fff;
+      border: 1px solid var(--border-light);
+      color: #333;
+      cursor: pointer;
+    }
+
+    .btn-outline {
+      background: #fff;
     }
 
     .sub-header {
@@ -98,6 +110,106 @@
       font-weight: 700;
       margin-bottom: 12px;
       color: var(--uplus-dark);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .section-title .more {
+      font-size: 12px;
+      color: #888;
+      cursor: pointer;
+    }
+
+    .list-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 0 16px;
+      margin-bottom: 24px;
+      border: 1px solid var(--border-light);
+    }
+
+    .list-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 0;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      transition: background 0.2s;
+      gap: 10px;
+    }
+
+    .list-item:last-child { border-bottom: none; }
+    .list-item:hover { background: #fdfdfd; }
+
+    .list-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+      flex: 1;
+    }
+
+    .list-badge {
+      background: #ffeeef;
+      color: var(--uplus-magenta);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .list-title {
+      font-size: 15px;
+      color: #333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;
+      font-weight: 500;
+    }
+
+    .list-date {
+      font-size: 12px;
+      color: #999;
+      white-space: nowrap;
+    }
+
+    .quick-action-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 30px;
+    }
+
+    .quick-btn {
+      background: #fff;
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      padding: 18px 10px;
+      text-align: center;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--uplus-dark);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      position: relative;
+      overflow: hidden;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+
+    .quick-btn.highlight {
+      background: #ffe5f1;
+      border-color: #ffdceb;
+      color: var(--uplus-magenta);
     }
 
     .menu-grid {
@@ -177,6 +289,37 @@
       color: #fff;
       border-color: var(--uplus-magenta);
       font-weight: bold;
+    }
+
+    .policy-category-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      overflow-x: auto;
+      white-space: nowrap;
+      scrollbar-width: none;
+    }
+
+    .policy-category-tabs::-webkit-scrollbar { display: none; }
+
+    .p-tab {
+      flex: 1;
+      min-width: 80px;
+      text-align: center;
+      padding: 12px 10px;
+      background: #fff;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #666;
+      cursor: pointer;
+    }
+
+    .p-tab.active {
+      background: var(--uplus-dark);
+      color: #fff;
+      border-color: var(--uplus-dark);
     }
 
     .accordion {
@@ -682,10 +825,26 @@
   <div id="page-home" class="page active container">
     <header class="main-header">
       <div class="logo">유림텔레콤 <span>Class</span></div>
-      <div class="header-user-profile">
-        <span id="logged-user-name">이주석</span> 님
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="header-user-profile" onclick="handleProfileClick()">
+          <span id="logged-user-name">이주석</span> 님
+        </div>
+        <button class="btn-sm btn-outline" style="padding: 6px 10px; font-size:12px; border-radius:20px;" onclick="doLogout()">로그아웃</button>
       </div>
     </header>
+
+    <div class="section-title">공지사항 <span class="more" onclick="goToPage('page-notice-list', 0)">더보기 +</span></div>
+    <div class="list-card" id="home-notice-list"></div>
+
+    <div class="section-title">빠른 실행</div>
+    <div class="quick-action-grid">
+      <div class="quick-btn" onclick="goToPage('page-policy', 5)">
+        <span style="position:relative; z-index:2; text-shadow: 0 1px 3px rgba(255,255,255,0.8);">정책조회</span>
+      </div>
+      <div class="quick-btn highlight" onclick="openDiagnosticUrl()">
+        <span style="position:relative; z-index:2; text-shadow: 0 1px 3px rgba(255,255,255,0.8);">고객문진표 작성</span>
+      </div>
+    </div>
 
     <div class="section-title">학습 카테고리</div>
     <div class="menu-grid">
@@ -717,6 +876,51 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="page-notice-list" class="page container">
+    <div class="sub-header">
+      <div class="sub-title">공지사항</div>
+      <div class="search-mini">
+        <span class="icon">🔍</span>
+        <input type="text" placeholder="검색" oninput="filterSimpleList('notice-list-container', this.value)">
+      </div>
+    </div>
+    <div class="list-card" id="notice-list-container"></div>
+  </div>
+
+  <div id="page-notice-detail" class="page container">
+    <div class="sub-header">
+      <div class="sub-title" id="notice-detail-title">공지 제목</div>
+      <div></div>
+    </div>
+    <div id="page-notice-dynamic-area"></div>
+  </div>
+
+  <div id="page-policy" class="page container">
+    <div class="sub-header">
+      <div class="sub-title">정책</div>
+      <div class="search-mini">
+        <span class="icon">🔍</span>
+        <input type="text" placeholder="검색" oninput="filterSimpleList('policy-list-container', this.value)">
+      </div>
+    </div>
+
+    <div class="policy-category-tabs">
+      <div class="p-tab active" onclick="switchPolicyTab(this, 'mobile')">모바일정책</div>
+      <div class="p-tab" onclick="switchPolicyTab(this, 'home')">홈정책</div>
+      <div class="p-tab" onclick="switchPolicyTab(this, 'b2b')">특판정책</div>
+    </div>
+
+    <div class="list-card" id="policy-list-container"></div>
+  </div>
+
+  <div id="page-policy-detail" class="page container">
+    <div class="sub-header">
+      <div class="sub-title" id="policy-detail-title">정책 제목</div>
+      <div></div>
+    </div>
+    <div id="page-policy-dynamic-area"></div>
   </div>
 
   <div id="page-edu" class="page container">
@@ -767,6 +971,8 @@
     <div class="nav-item" onclick="openBoardMenu('education_material', '교육자료', 2)"><span class="nav-icon">❏</span>교육자료</div>
     <div class="nav-item" onclick="openBoardMenu('product_material', '상품자료', 3)"><span class="nav-icon">⊞</span>상품자료</div>
     <div class="nav-item" onclick="openBoardMenu('issue', '이슈사항', 4)"><span class="nav-icon">⚠</span>이슈사항</div>
+    <div class="nav-item" onclick="goToPage('page-policy', 5)"><span class="nav-icon">☰</span>정책</div>
+    <div class="nav-item" onclick="openTestUrl()"><span class="nav-icon">✓</span>테스트</div>
   </nav>
 
   <div id="image-viewer-modal" class="viewer-modal">
@@ -800,9 +1006,14 @@
     let currentBoardType = null;
     let currentBoardCategoryId = 'all';
     let currentBoardCards = [];
-
+    let currentPolicyType = 'mobile';
     let imageViewerImages = [];
     let imageViewerIndex = 0;
+
+    const externalLinks = {
+      diagnostic: 'https://ureemuply.github.io/lguenvet-pro/',
+      test: 'https://ureemuply.github.io/lguenvet-pro/'
+    };
 
     function escapeHtml(str = '') {
       return String(str)
@@ -836,7 +1047,25 @@
       showPageOnly(pageId);
       activateBottomNav(navIndex);
       if (pageId === 'page-edu') loadEduLevels();
+      if (pageId === 'page-policy') loadPolicies(currentPolicyType);
+      if (pageId === 'page-notice-list') loadNotices();
       history.pushState({ pageId, navIndex }, '', '#' + pageId);
+    }
+
+    function handleProfileClick() {
+      alert('읽기 전용 페이지입니다.');
+    }
+
+    function doLogout() {
+      alert('로그아웃 기능은 연결 환경에 맞게 교체하면 됩니다.');
+    }
+
+    function openDiagnosticUrl() {
+      window.open(externalLinks.diagnostic, '_blank');
+    }
+
+    function openTestUrl() {
+      window.open(externalLinks.test, '_blank');
     }
 
     function formatDate(dateString) {
@@ -868,6 +1097,149 @@
         }
       } catch (e) {}
       return '';
+    }
+
+    async function loadNotices() {
+      const targets = ['home-notice-list', 'notice-list-container'];
+
+      for (const targetId of targets) {
+        const el = document.getElementById(targetId);
+        if (el) el.innerHTML = `<div class="list-item"><div class="list-title-wrap"><span class="list-title">불러오는 중...</span></div></div>`;
+      }
+
+      const { data, error } = await supabaseClient
+        .from('notices')
+        .select('*')
+        .eq('is_visible', true)
+        .order('created_at', { ascending: false });
+
+      if (error || !data) {
+        console.error(error);
+        const failHtml = `<div class="empty-box">공지사항을 불러오지 못했습니다.</div>`;
+        targets.forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = failHtml; });
+        return;
+      }
+
+      const homeData = data.slice(0, 3);
+
+      const renderList = (rows) => rows.length ? rows.map(row => `
+        <div class="list-item simple-search-item" data-search="${escapeHtml((row.title || '').toLowerCase())}" onclick="openNoticeDetail(${row.id})">
+          <div class="list-title-wrap">
+            ${row.is_pinned ? '<span class="list-badge">필독</span>' : ''}
+            <span class="list-title">${escapeHtml(row.title || '공지')}</span>
+          </div>
+          <div class="list-date">${formatDate(row.created_at).slice(5).replace('.', '.')}</div>
+        </div>
+      `).join('') : `<div class="empty-box">공지사항이 없습니다.</div>`;
+
+      const homeEl = document.getElementById('home-notice-list');
+      const listEl = document.getElementById('notice-list-container');
+      if (homeEl) homeEl.innerHTML = renderList(homeData);
+      if (listEl) listEl.innerHTML = renderList(data);
+    }
+
+    async function openNoticeDetail(noticeId) {
+      showPageOnly('page-notice-detail');
+      activateBottomNav(0);
+      document.getElementById('notice-detail-title').innerText = '불러오는 중...';
+      document.getElementById('page-notice-dynamic-area').innerHTML = `<div class="empty-box">불러오는 중...</div>`;
+
+      const { data, error } = await supabaseClient
+        .from('notices')
+        .select('*')
+        .eq('id', noticeId)
+        .single();
+
+      if (error || !data) {
+        console.error(error);
+        document.getElementById('page-notice-dynamic-area').innerHTML = `<div class="empty-box">공지 내용을 불러오지 못했습니다.</div>`;
+        return;
+      }
+
+      document.getElementById('notice-detail-title').innerText = data.title || '공지';
+      document.getElementById('page-notice-dynamic-area').innerHTML = `
+        ${data.image_url ? `<div class="slider-container"><div class="slider-wrapper"><div class="slider-item"><img src="${escapeHtml(data.image_url)}" class="slider-img" onclick='openImageViewer(${JSON.stringify([data.image_url])}, 0)'></div></div></div>` : ''}
+        <div class="list-date" style="margin-bottom:12px;">${formatDate(data.created_at)}</div>
+        <div class="content-text-box">${data.body_html || data.body || ''}</div>
+      `;
+      history.pushState({ pageId: 'page-notice-detail', navIndex: 0 }, '', `#notice-${noticeId}`);
+    }
+
+    async function loadPolicies(policyType = 'mobile') {
+      currentPolicyType = policyType;
+      const wrap = document.getElementById('policy-list-container');
+      wrap.innerHTML = `<div class="list-item"><div class="list-title-wrap"><span class="list-title">불러오는 중...</span></div></div>`;
+
+      const { data, error } = await supabaseClient
+        .from('policies')
+        .select('*')
+        .eq('policy_type', policyType)
+        .eq('is_visible', true)
+        .order('created_at', { ascending: false });
+
+      if (error || !data) {
+        console.error(error);
+        wrap.innerHTML = `<div class="empty-box">정책을 불러오지 못했습니다.</div>`;
+        return;
+      }
+
+      wrap.innerHTML = data.length ? data.map(row => `
+        <div class="list-item simple-search-item" data-search="${escapeHtml((row.title || '').toLowerCase())}" onclick="openPolicyDetail(${row.id})">
+          <div class="list-title-wrap">
+            <span class="list-badge">${escapeHtml(policyTypeLabel(row.policy_type))}</span>
+            <span class="list-title">${escapeHtml(row.title || '정책')}</span>
+          </div>
+          <div class="list-date">${formatDate(row.created_at).slice(5).replace('.', '.')}</div>
+        </div>
+      `).join('') : `<div class="empty-box">등록된 정책이 없습니다.</div>`;
+    }
+
+    function policyTypeLabel(type) {
+      if (type === 'mobile') return '모바일';
+      if (type === 'home') return '홈';
+      if (type === 'b2b') return '특판';
+      return '정책';
+    }
+
+    function switchPolicyTab(el, type) {
+      document.querySelectorAll('#page-policy .p-tab').forEach(tab => tab.classList.remove('active'));
+      el.classList.add('active');
+      loadPolicies(type);
+    }
+
+    async function openPolicyDetail(policyId) {
+      showPageOnly('page-policy-detail');
+      activateBottomNav(5);
+      document.getElementById('policy-detail-title').innerText = '불러오는 중...';
+      document.getElementById('page-policy-dynamic-area').innerHTML = `<div class="empty-box">불러오는 중...</div>`;
+
+      const { data, error } = await supabaseClient
+        .from('policies')
+        .select('*')
+        .eq('id', policyId)
+        .single();
+
+      if (error || !data) {
+        console.error(error);
+        document.getElementById('page-policy-dynamic-area').innerHTML = `<div class="empty-box">정책 내용을 불러오지 못했습니다.</div>`;
+        return;
+      }
+
+      document.getElementById('policy-detail-title').innerText = data.title || '정책';
+      document.getElementById('page-policy-dynamic-area').innerHTML = `
+        ${data.image_url ? `<div class="slider-container"><div class="slider-wrapper"><div class="slider-item"><img src="${escapeHtml(data.image_url)}" class="slider-img" onclick='openImageViewer(${JSON.stringify([data.image_url])}, 0)'></div></div></div>` : ''}
+        <div class="list-date" style="margin-bottom:12px;">${formatDate(data.created_at)}</div>
+        <div class="content-text-box">${data.body_html || data.body || ''}</div>
+      `;
+      history.pushState({ pageId: 'page-policy-detail', navIndex: 5 }, '', `#policy-${policyId}`);
+    }
+
+    function filterSimpleList(containerId, keyword) {
+      const q = String(keyword || '').trim().toLowerCase();
+      document.querySelectorAll(`#${containerId} .simple-search-item`).forEach(item => {
+        const text = item.dataset.search || '';
+        item.style.display = !q || text.includes(q) ? 'flex' : 'none';
+      });
     }
 
     async function loadEduLevels() {
@@ -1408,6 +1780,7 @@
 
     async function bootstrap() {
       document.getElementById('logged-user-name').innerText = currentUserName;
+      await loadNotices();
       const openedDirect = await directOpenFromQuery();
       if (!openedDirect) {
         goHome();
