@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Notice Editor</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --uplus-magenta:#e6007e;
+    --uplus-dark:#2f2f35;
+    --line:#e7e7ec;
+    --bg:#f7f7fb;
+    --card:#ffffff;
+    --muted:#6f7480;
+    --danger:#c53b58;
+    --pending:#f1f3f5;
+    --add:#eef8ff;
+    --ok:#1b7f4a;
+    --warn:#a86400;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:#222}
+  .wrap{max-width:1100px;margin:0 auto;padding:20px}
+  .topbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap}
+  .title{font-size:24px;font-weight:800}
+  .subtitle{font-size:13px;color:var(--muted);margin-top:4px}
+  .row{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+  .col-main{flex:1 1 720px;min-width:0}
+  .col-side{width:320px;max-width:100%;display:flex;flex-direction:column;gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 6px 16px rgba(0,0,0,.04)}
+  .card-header{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+  .label{font-size:13px;color:var(--muted);margin-bottom:8px;font-weight:700}
+  .hint{font-size:12px;color:var(--muted)}
+  input[type="text"], input[type="number"], textarea, select{width:100%;border:1px solid #d9dce3;border-radius:12px;padding:12px;font-size:14px;background:#fff}
+  textarea{min-height:100px;resize:vertical}
+  .grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .btn{border:none;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}
+  .btn-primary{background:var(--uplus-magenta);color:#fff}
+  .btn-dark{background:var(--uplus-dark);color:#fff}
+  .btn-light{background:#fff;border:1px solid #d9dce3;color:#333}
+  .btn-danger{background:#fff1f4;border:1px solid #f0b7c5;color:var(--danger)}
+  .btn-ghost{background:#f3f4f7;color:#333}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .editor{min-height:360px;border:1px solid #d9dce3;border-radius:14px;padding:14px;background:#fff;line-height:1.7}
+  .editor:focus{outline:2px solid rgba(230,0,126,.15);border-color:#e7b0c7}
+  .editor h2{font-size:22px;margin:1em 0 .55em}
+  .editor p{margin:.7em 0}
+  .editor ul,.editor ol{padding-left:20px;margin:.7em 0}
+  .box-strong,.box-tip,.box-warn{padding:12px 14px;border-radius:12px;margin:10px 0}
+  .box-strong{border:1px solid #e7b0c7;background:#fff1f7}
+  .box-tip{border:1px solid #b9ddff;background:#eef7ff}
+  .box-warn{border:1px solid #ffd0a8;background:#fff6ed}
+  .image-card{border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff;position:relative}
+  .image-card img{width:100%;aspect-ratio:4 / 5;height:auto;object-fit:cover;border-radius:10px;background:#f2f2f2;cursor:default}
+  .image-card.pending-add{background:var(--add)}
+  .badge{position:absolute;top:8px;left:8px;background:var(--uplus-dark);color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:999px}
+  .badge.add{background:#1a76d2}
+  .badge.keep{background:#2f2f35}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .status{font-size:13px;color:var(--muted)}
+  .status.ok{color:var(--ok)}
+  .status.warn{color:var(--warn)}
+  .status.danger{color:var(--danger)}
+  .hidden{display:none !important}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-size:12px;font-weight:700}
+  .footer{position:sticky;bottom:0;background:rgba(247,247,251,.92);backdrop-filter:blur(6px);padding-top:12px;margin-top:18px}
+  .notice{padding:12px 14px;border-radius:12px;background:#f8f9fb;border:1px solid var(--line);font-size:13px;line-height:1.6;color:#444}
+  .size-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#f3f4f7;border:1px solid #d9dce3;font-size:12px;color:#4a4f5a;font-weight:700}
+  @media (max-width:768px){
+    .wrap{padding:14px}
+    .title{font-size:20px}
+    .editor{min-height:260px}
+    .grid-2{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="title">editor3 · 공지사항 편집</div>
+      <div id="editorPath" class="subtitle">불러오는 중...</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-light" type="button" onclick="goBack()">목록으로</button>
+      <button class="btn btn-primary" type="button" onclick="saveNotice()">저장</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-main">
+      <div class="card">
+        <div class="grid-2">
+          <div>
+            <div class="label">공지 라벨</div>
+            <input id="badgeInput" type="text" placeholder="예: 필독, 공지, 중요" />
+          </div>
+          <div>
+            <div class="label">정렬값</div>
+            <input id="sortOrderInput" type="number" value="0" />
+          </div>
+        </div>
+
+        <div style="height:12px"></div>
+        <div class="grid-2">
+          <div>
+            <div class="label">제목</div>
+            <input id="titleInput" type="text" placeholder="제목을 입력하세요" />
+          </div>
+          <div>
+            <div class="label">요약문</div>
+            <input id="summaryInput" type="text" placeholder="목록과 메인 홈에서 보일 요약문" />
+          </div>
+        </div>
+
+        <div style="height:12px"></div>
+        <div class="grid-2">
+          <label class="pill"><input id="pinnedCheckbox" type="checkbox" /> 상단고정</label>
+          <label class="pill"><input id="visibleCheckbox" type="checkbox" checked /> 노출</label>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="card-header">
+          <div>
+            <div class="label" style="margin-bottom:2px;">대표 이미지</div>
+            <div class="hint">공지 상세 상단 대표 이미지입니다. 없어도 저장할 수 있습니다.</div>
+            <div class="size-chip" style="margin-top:8px;">권장 1200 × 675px</div>
+          </div>
+          <label class="btn btn-dark" style="display:inline-flex;align-items:center;">
+            이미지 선택
+            <input id="coverInput" type="file" accept="image/*" class="hidden" />
+          </label>
+        </div>
+        <div style="height:12px"></div>
+        <div id="coverWrap"><div class="notice">대표 이미지가 아직 없습니다.</div></div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="label">본문</div>
+        <div class="toolbar">
+          <button class="btn btn-ghost" type="button" onclick="formatBlockTag('h2')">제목</button>
+          <button class="btn btn-ghost" type="button" onclick="formatBlockTag('p')">본문</button>
+          <button class="btn btn-ghost" type="button" onclick="execCmd('bold')">굵게</button>
+          <button class="btn btn-ghost" type="button" onclick="execCmd('insertUnorderedList')">목록</button>
+          <button class="btn btn-ghost" type="button" onclick="insertBlock('strong')">강조</button>
+          <button class="btn btn-ghost" type="button" onclick="insertBlock('tip')">TIP</button>
+          <button class="btn btn-ghost" type="button" onclick="insertBlock('warn')">주의</button>
+        </div>
+        <div id="editorText" class="editor" contenteditable="true"></div>
+      </div>
+    </div>
+
+    <div class="col-side">
+      <div class="card">
+        <div class="label">저장 상태</div>
+        <div id="saveStatus" class="status">변경 사항 없음</div>
+      </div>
+
+      <div class="card">
+        <div class="label">현재 모드</div>
+        <div id="modeStatus" class="notice">확인 중...</div>
+      </div>
+
+      <div class="card">
+        <div class="label">구조 안내</div>
+        <div class="notice">
+          공지사항은 목록/홈 요약/상세보기에 함께 사용됩니다.<br>
+          저장 후에는 admin에서 해당 공지 상세 화면으로 바로 이동합니다.<br>
+          page-home을 먼저 비추지 않는 direct open 기준을 맞춥니다.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+      <button class="btn btn-light" type="button" onclick="goBack()">목록으로</button>
+      <button class="btn btn-primary" type="button" onclick="saveNotice()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://ytnxmnbctujuopbqpurl.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_4oBm89ecivuVF6StOBz7yg_qNBItC4z';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const TABLE_NOTICES = 'notice_posts';
+const STORAGE_BUCKET = 'board-assets';
+const ADMIN_RETURN_BASE = (() => {
+  const fromQuery = new URLSearchParams(location.search).get('admin_return') || '';
+  if (fromQuery.trim()) return fromQuery.trim();
+  try {
+    const ref = document.referrer || '';
+    if (ref) {
+      const u = new URL(ref);
+      const name = (u.pathname.split('/').pop() || '').trim();
+      if (name) return name;
+    }
+  } catch(e) {}
+  return 'admin.html';
+})();
+
+let currentNoticeId = null;
+let editingMode = 'create';
+let dirty = false;
+let suppressBeforeUnload = false;
+
+let draft = {
+  badge_text: '',
+  title: '',
+  summary: '',
+  body_html: '',
+  status: 'published',
+  is_visible: true,
+  is_pinned: false,
+  sort_order: 0,
+  cover: {
+    mode: 'empty',
+    url: '',
+    path: '',
+    file: null,
+    deleteOld: false
+  }
+};
+
+function qs(key){ return new URLSearchParams(location.search).get(key); }
+function escapeHtml(value = ''){
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+function slugify(value = ''){
+  return String(value).toLowerCase().trim()
+    .replace(/[^a-z0-9가-힣]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'notice';
+}
+function setDirty(next = true){
+  dirty = next;
+  const el = document.getElementById('saveStatus');
+  if (!el) return;
+  if (next) suppressBeforeUnload = false;
+  if (dirty) {
+    el.textContent = '저장되지 않은 변경 사항이 있습니다.';
+    el.className = 'status warn';
+  } else {
+    el.textContent = '변경 사항 없음';
+    el.className = 'status ok';
+  }
+}
+function updateEditorPath(){
+  const title = draft.title || '새 공지';
+  document.getElementById('editorPath').textContent = `공지사항 > ${editingMode === 'edit' ? '수정' : '새 글 작성'} > ${title}`;
+}
+function bindDirtyEvents(){
+  ['badgeInput','titleInput','summaryInput','sortOrderInput'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => setDirty(true));
+  });
+  ['pinnedCheckbox','visibleCheckbox'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => setDirty(true));
+  });
+  document.getElementById('editorText').addEventListener('input', () => setDirty(true));
+  document.getElementById('coverInput').addEventListener('change', onCoverSelected);
+  window.addEventListener('beforeunload', (e) => {
+    if (!dirty || suppressBeforeUnload) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+}
+function collectFormValues(){
+  draft.badge_text = document.getElementById('badgeInput').value.trim();
+  draft.title = document.getElementById('titleInput').value.trim();
+  draft.summary = document.getElementById('summaryInput').value.trim();
+  draft.body_html = document.getElementById('editorText').innerHTML.trim();
+  draft.status = 'published';
+  draft.is_visible = document.getElementById('visibleCheckbox').checked;
+  draft.is_pinned = document.getElementById('pinnedCheckbox').checked;
+  draft.sort_order = Number(document.getElementById('sortOrderInput').value || 0);
+}
+function renderAll(){
+  document.getElementById('badgeInput').value = draft.badge_text || '';
+  document.getElementById('titleInput').value = draft.title || '';
+  document.getElementById('summaryInput').value = draft.summary || '';
+  document.getElementById('sortOrderInput').value = Number(draft.sort_order || 0);
+  document.getElementById('visibleCheckbox').checked = !!draft.is_visible;
+  document.getElementById('pinnedCheckbox').checked = !!draft.is_pinned;
+  document.getElementById('editorText').innerHTML = draft.body_html || '';
+  renderCover();
+  updateEditorPath();
+}
+function renderCover(){
+  const wrap = document.getElementById('coverWrap');
+  const cover = draft.cover;
+  if (!cover || cover.mode === 'empty' || cover.mode === 'delete') {
+    wrap.innerHTML = '<div class="notice">대표 이미지가 아직 없습니다.</div>';
+    return;
+  }
+  const isNew = cover.mode === 'add' || cover.mode === 'replace';
+  wrap.innerHTML = `
+    <div class="image-card ${isNew ? 'pending-add' : ''}">
+      <div class="badge ${isNew ? 'add' : 'keep'}">${isNew ? '새 파일' : '기존'}</div>
+      <img src="${escapeHtml(cover.url)}" alt="cover" />
+      <div class="actions">
+        <label class="btn btn-light" style="display:inline-flex;align-items:center;">
+          교체
+          <input id="coverInputInline" type="file" accept="image/*" class="hidden" />
+        </label>
+        <button class="btn btn-danger" type="button" onclick="markCoverDelete()">삭제</button>
+      </div>
+    </div>
+  `;
+  const inlineInput = document.getElementById('coverInputInline');
+  if (inlineInput) inlineInput.addEventListener('change', onCoverSelected);
+}
+function execCmd(cmd){ document.execCommand(cmd, false, null); setDirty(true); }
+function formatBlockTag(tag){ document.execCommand('formatBlock', false, '<' + tag + '>'); setDirty(true); }
+function insertBlock(type){
+  const classes = {strong:'box-strong', tip:'box-tip', warn:'box-warn'};
+  const labels = {strong:'강조 내용을 입력하세요', tip:'TIP 내용을 입력하세요', warn:'주의 내용을 입력하세요'};
+  const html = `<div class="${classes[type]}">${labels[type]}</div><p><br></p>`;
+  document.execCommand('insertHTML', false, html);
+  setDirty(true);
+}
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  const sel = window.getSelection?.();
+  if (!sel || !sel.anchorNode) return;
+  const target = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+  const box = target?.closest?.('.box-strong, .box-tip, .box-warn');
+  if (!box) return;
+  event.preventDefault();
+  document.execCommand('insertHTML', false, '</div><p><br></p>');
+  setDirty(true);
+});
+function onCoverSelected(event){
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const hadExisting = !!draft.cover?.path;
+  if (draft.cover?.url?.startsWith?.('blob:')) {
+    try { URL.revokeObjectURL(draft.cover.url); } catch(_) {}
+  }
+  draft.cover = {
+    mode: hadExisting ? 'replace' : 'add',
+    url: URL.createObjectURL(file),
+    path: draft.cover?.path || '',
+    file,
+    deleteOld: hadExisting
+  };
+  renderCover();
+  setDirty(true);
+  event.target.value = '';
+}
+function markCoverDelete(){
+  draft.cover.mode = 'delete';
+  draft.cover.file = null;
+  renderCover();
+  setDirty(true);
+}
+function validateDraft(){
+  collectFormValues();
+  if (!draft.title) {
+    alert('제목을 입력해주세요.');
+    return false;
+  }
+  if (!draft.summary) {
+    alert('요약문을 입력해주세요.');
+    return false;
+  }
+  const plainText = draft.body_html.replace(/<[^>]+>/g, '').trim();
+  if (!plainText) {
+    alert('본문을 입력해주세요.');
+    return false;
+  }
+  return true;
+}
+function buildAdminUrl(){
+  const base = ADMIN_RETURN_BASE || 'admin.html';
+  const separator = base.includes('?') ? '&' : '?';
+  return `${base}${separator}open_notice_id=${currentNoticeId}`;
+}
+function buildNoticeListUrl(){
+  const base = ADMIN_RETURN_BASE || 'admin.html';
+  if (base.includes('#')) return base;
+  return `${base}#page-notice-list`;
+}
+function goBack(){
+  if (dirty && !confirm('저장되지 않은 변경 사항이 있습니다. 목록으로 돌아갈까요?')) return;
+  if (document.referrer && /admin\.html/i.test(document.referrer)) {
+    history.back();
+    return;
+  }
+  location.href = buildNoticeListUrl();
+}
+async function uploadAsset(file, noticeId){
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2,10)}-${slugify(file.name.replace(/\.[^.]+$/, ''))}.${ext}`;
+  const path = `notices/${noticeId || 'new'}/cover/${filename}`;
+  const { error: uploadError } = await supabaseClient.storage.from(STORAGE_BUCKET).upload(path, file, { upsert: true });
+  if (uploadError) throw uploadError;
+  const { data } = supabaseClient.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+  return { path, url: data?.publicUrl || '' };
+}
+async function safeRemoveFiles(paths){
+  const clean = [...new Set((paths || []).filter(Boolean))];
+  if (!clean.length) return;
+  const { error } = await supabaseClient.storage.from(STORAGE_BUCKET).remove(clean);
+  if (error) console.warn('storage remove warning:', error);
+}
+async function resolveCoverUpload(){
+  const cover = draft.cover;
+  if (cover.mode === 'keep' && cover.url) return { url: cover.url, path: cover.path || '' };
+  if ((cover.mode === 'add' || cover.mode === 'replace') && cover.file) {
+    return await uploadAsset(cover.file, currentNoticeId || 'new');
+  }
+  return { url: '', path: '' };
+}
+async function loadNotice(noticeId){
+  const { data, error } = await supabaseClient.from(TABLE_NOTICES).select('*').eq('id', noticeId).single();
+  if (error || !data) {
+    console.error(error);
+    alert('공지사항을 불러오지 못했습니다.');
+    return;
+  }
+  draft.badge_text = data.badge_text || '';
+  draft.title = data.title || '';
+  draft.summary = data.summary || '';
+  draft.body_html = data.body_html || '';
+  draft.status = data.status || 'published';
+  draft.is_visible = data.is_visible !== false;
+  draft.is_pinned = !!data.is_pinned;
+  draft.sort_order = Number(data.sort_order || 0);
+  draft.cover = {
+    mode: data.cover_image_url ? 'keep' : 'empty',
+    url: data.cover_image_url || '',
+    path: data.cover_image_path || '',
+    file: null,
+    deleteOld: false
+  };
+  renderAll();
+  setDirty(false);
+}
+async function saveNotice(){
+  if (!validateDraft()) return;
+  const saveStatus = document.getElementById('saveStatus');
+  saveStatus.textContent = '저장 중...';
+  saveStatus.className = 'status';
+  try {
+    const previousCoverPath = currentNoticeId && draft.cover.deleteOld ? draft.cover.path : '';
+    const coverInfo = await resolveCoverUpload();
+    const payload = {
+      badge_text: draft.badge_text,
+      title: draft.title,
+      summary: draft.summary,
+      body_html: draft.body_html,
+      cover_image_url: coverInfo.url,
+      cover_image_path: coverInfo.path,
+      status: 'published',
+      is_visible: draft.is_visible,
+      is_pinned: draft.is_pinned,
+      sort_order: draft.sort_order
+    };
+    let savedId = currentNoticeId;
+    if (savedId) {
+      const { error } = await supabaseClient.from(TABLE_NOTICES).update(payload).eq('id', savedId);
+      if (error) throw error;
+    } else {
+      const { data, error } = await supabaseClient.from(TABLE_NOTICES).insert(payload).select('id').single();
+      if (error) throw error;
+      savedId = data.id;
+      currentNoticeId = savedId;
+      editingMode = 'edit';
+      document.getElementById('modeStatus').textContent = '기존 공지 수정 모드입니다. 저장 시 기존 데이터가 갱신됩니다.';
+    }
+    if (previousCoverPath && previousCoverPath !== coverInfo.path) {
+      await safeRemoveFiles([previousCoverPath]);
+    }
+    draft.cover = {
+      mode: coverInfo.url ? 'keep' : 'empty',
+      url: coverInfo.url,
+      path: coverInfo.path,
+      file: null,
+      deleteOld: false
+    };
+    renderAll();
+    setDirty(false);
+    saveStatus.textContent = '저장 완료';
+    saveStatus.className = 'status ok';
+    const nextUrl = buildAdminUrl();
+    suppressBeforeUnload = true;
+    location.replace(nextUrl);
+  } catch (error) {
+    console.error(error);
+    saveStatus.textContent = '저장 실패';
+    saveStatus.className = 'status danger';
+    alert(`저장 중 오류가 발생했습니다.\n${error.message || error}`);
+  }
+}
+async function init(){
+  bindDirtyEvents();
+  const rawId = Number(qs('id') || 0);
+  if (rawId > 0) {
+    currentNoticeId = rawId;
+    editingMode = 'edit';
+    document.getElementById('modeStatus').textContent = '기존 공지 수정 모드입니다. 저장 시 기존 데이터가 갱신됩니다.';
+    await loadNotice(rawId);
+  } else {
+    document.getElementById('modeStatus').textContent = '새 공지 작성 모드입니다. 저장 시 새 공지가 생성됩니다.';
+    renderAll();
+    setDirty(false);
+  }
+}
+init();
+</script>
+</body>
+</html>

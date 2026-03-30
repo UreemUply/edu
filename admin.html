@@ -229,7 +229,7 @@
 (function(){
   try {
     const __routeParams = new URLSearchParams(location.search);
-    if (__routeParams.get('open_content_id') || __routeParams.get('open_post_id')) {
+    if (__routeParams.get('open_content_id') || __routeParams.get('open_post_id') || __routeParams.get('open_notice_id') || __routeParams.get('open_policy_id')) {
       document.documentElement.classList.add('route-direct-content');
     }
   } catch(e) {}
@@ -424,7 +424,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
     <div id="page-notice-list" class="page container">
         <div class="sub-header">
             <div class="sub-title">공지사항</div>
-            <div class="admin-only admin-controls"><button class="btn-admin add" style="margin:0; padding:6px 12px; width:auto;" onclick="addListRow('notice-list-container', '공지')">+ 새 공지</button></div>
+            <div class="admin-only admin-controls"><button class="btn-admin add" style="margin:0; padding:6px 12px; width:auto;" onclick="openNoticeEditor()">+ 새 공지</button></div>
             <div class="search-mini"><span class="icon">🔍</span><input type="text" placeholder="검색" oninput="filterSearch(this)"></div>
         </div>
         <div class="list-card" id="notice-list-container">
@@ -449,8 +449,8 @@ html.route-direct-content body.route-ready{visibility:visible;}
     <div id="page-notice-detail" class="page container">
         <div class="sub-header">
             <div class="sub-title" id="notice-detail-title">공지 제목</div>
-            <div class="admin-only admin-controls" style="margin-left: auto; margin-right: 15px;">
-                <button class="btn-admin btn-edit-content" style="background:var(--uplus-dark); padding:6px 12px;" onclick="toggleContentEdit('page-notice-detail')">내용 편집하기</button>
+            <div id="notice-detail-controls" class="admin-only admin-controls" style="margin-left: auto; margin-right: 15px;">
+                <button class="btn-admin btn-edit-content" style="background:var(--uplus-dark); padding:6px 12px;" onclick="openNoticeEditor()">editor3에서 편집하기</button>
             </div>
         </div>
         <div class="content-toolbar admin-only" style="display:none;">
@@ -470,7 +470,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
     <div id="page-policy" class="page container">
         <div class="sub-header">
             <div class="sub-title">정책</div>
-            <div class="admin-only admin-controls"><button class="btn-admin add" style="margin:0; padding:6px 12px; width:auto;" onclick="addPolicyRow()">+ 새 정책</button></div>
+            <div class="admin-only admin-controls"><button class="btn-admin add" style="margin:0; padding:6px 12px; width:auto;" onclick="openPolicyEditor()">+ 새 정책</button></div>
             <div class="search-mini"><span class="icon">🔍</span><input type="text" placeholder="검색" oninput="filterSearch(this)"></div>
         </div>
         <div class="policy-category-tabs">
@@ -490,8 +490,8 @@ html.route-direct-content body.route-ready{visibility:visible;}
     <div id="page-policy-detail" class="page container">
         <div class="sub-header">
             <div class="sub-title" id="policy-detail-title">정책 제목</div>
-            <div class="admin-only admin-controls" style="margin-left: auto; margin-right: 15px;">
-                <button class="btn-admin btn-edit-content" style="background:var(--uplus-dark); padding:6px 12px;" onclick="toggleContentEdit('page-policy-detail')">내용 편집하기</button>
+            <div id="policy-detail-controls" class="admin-only admin-controls" style="margin-left: auto; margin-right: 15px;">
+                <button class="btn-admin btn-edit-content" style="background:var(--uplus-dark); padding:6px 12px;" onclick="openPolicyEditor()">editor4에서 편집하기</button>
             </div>
         </div>
         <div class="content-toolbar admin-only" style="display:none;">
@@ -3834,6 +3834,462 @@ html.route-direct-content body.route-ready{visibility:visible;}
       return;
     }
     Object.keys(BOARD_VIEWS).forEach(pageId => loadBoardPage(pageId, true));
+  });
+})();
+</script>
+
+
+<script id="oai-notice-policy-db-patch">
+(function(){
+  const supabase = window.supabaseClient;
+  if (!supabase) return;
+
+  const NOTICE_LIST_ID = 'notice-list-container';
+  const HOME_NOTICE_ID = 'home-notice-list';
+  const POLICY_LIST_ID = 'policy-list-container';
+  const NOTICE_DETAIL_AREA_ID = 'page-notice-dynamic-area';
+  const POLICY_DETAIL_AREA_ID = 'page-policy-dynamic-area';
+  const POLICY_TAB_WRAP_SELECTOR = '#page-policy .policy-category-tabs';
+  const NOTICE_PAGE_ID = 'page-notice-list';
+  const POLICY_PAGE_ID = 'page-policy';
+
+  let noticeRows = [];
+  let policyCategories = [];
+  let policyRows = [];
+  let activePolicyCategory = 'mobile';
+  let currentNoticePost = null;
+  let currentPolicyPost = null;
+
+  function esc(str=''){
+    return String(str)
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'",'&#039;');
+  }
+  function fmtDate(v){
+    if (!v) return '';
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return '';
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${m}.${day}`;
+  }
+  function buildPublicUrl(path){
+    if (!path) return '';
+    try {
+      const { data } = supabase.storage.from('board-assets').getPublicUrl(path);
+      return data?.publicUrl || '';
+    } catch (e) { return ''; }
+  }
+  function normalizeImgUrl(row){
+    return row?.image_url || buildPublicUrl(row?.image_path) || '';
+  }
+  function stripHtml(html=''){
+    const div = document.createElement('div');
+    div.innerHTML = html || '';
+    return (div.textContent || div.innerText || '').trim();
+  }
+  function getVisibleAdminMode(){
+    return document.body.classList.contains('admin-mode') || document.documentElement.classList.contains('admin-mode');
+  }
+
+  async function removeStoragePaths(paths){
+    const uniq = [...new Set((paths || []).filter(Boolean))];
+    if (!uniq.length) return;
+    const { error } = await supabase.storage.from('board-assets').remove(uniq);
+    if (error) console.warn('storage remove warning', error);
+  }
+
+  async function fetchNoticePosts(){
+    const { data, error } = await supabase
+      .from('notice_posts')
+      .select('*')
+      .in('status', ['draft','published'])
+      .order('is_pinned', { ascending:false })
+      .order('sort_order', { ascending:true })
+      .order('created_at', { ascending:false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function fetchNoticeImages(postId){
+    const { data, error } = await supabase
+      .from('notice_post_images')
+      .select('*')
+      .eq('post_id', postId)
+      .order('sort_order', { ascending:true })
+      .order('created_at', { ascending:true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function fetchPolicyCategories(){
+    const { data, error } = await supabase
+      .from('policy_categories')
+      .select('*')
+      .eq('is_visible', true)
+      .order('sort_order', { ascending:true })
+      .order('created_at', { ascending:true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function fetchPolicyPosts(){
+    const { data, error } = await supabase
+      .from('policy_posts')
+      .select('*')
+      .in('status', ['draft','published'])
+      .order('is_pinned', { ascending:false })
+      .order('sort_order', { ascending:true })
+      .order('created_at', { ascending:false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function fetchPolicyImages(postId){
+    const { data, error } = await supabase
+      .from('policy_post_images')
+      .select('*')
+      .eq('post_id', postId)
+      .order('sort_order', { ascending:true })
+      .order('created_at', { ascending:true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  function renderNoticeList(){
+    const wrap = document.getElementById(NOTICE_LIST_ID);
+    if (!wrap) return;
+    if (!noticeRows.length) {
+      wrap.innerHTML = '<div style="padding:16px; text-align:center; color:#999; font-size:13px;">등록된 공지사항이 없습니다.</div>';
+      syncNoticesToHome();
+      return;
+    }
+    wrap.innerHTML = noticeRows.map(row => {
+      const badge = row.badge_text ? `<span class="list-badge">${esc(row.badge_text)}</span>` : '';
+      return `
+        <div class="list-item list-item-search" data-notice-id="${row.id}" onclick="openNoticeDetail(${row.id})">
+          <div class="list-title-wrap">${badge}<span class="list-title">${esc(row.title || '제목 없음')}</span></div>
+          <div class="list-date">${fmtDate(row.created_at || row.updated_at)}</div>
+          <div class="admin-only admin-controls" onclick="event.stopPropagation();">
+            <button class="btn-admin edit" onclick="openNoticeEditor(${row.id})">수정</button>
+            <button class="btn-admin del" onclick="deleteNoticePost(event, ${row.id})">삭제</button>
+          </div>
+        </div>`;
+    }).join('');
+    syncNoticesToHome();
+  }
+
+  function syncNoticesToHome(){
+    const homeContainer = document.getElementById(HOME_NOTICE_ID);
+    if (!homeContainer) return;
+    const source = noticeRows.filter(row => row.is_visible !== false).slice(0, 3);
+    if (!source.length) {
+      homeContainer.innerHTML = '<div style="padding:16px; text-align:center; color:#999; font-size:13px;">등록된 공지사항이 없습니다.</div>';
+      return;
+    }
+    homeContainer.innerHTML = source.map(row => {
+      const badge = row.badge_text ? `<span class="list-badge">${esc(row.badge_text)}</span>` : '';
+      return `
+        <div class="list-item" data-notice-id="${row.id}" onclick="openNoticeDetail(${row.id})">
+          <div class="list-title-wrap">${badge}<span class="list-title">${esc(row.title || '제목 없음')}</span></div>
+          <div class="list-date">${fmtDate(row.created_at || row.updated_at)}</div>
+        </div>`;
+    }).join('');
+  }
+  window.syncNoticesToHome = syncNoticesToHome;
+
+  function renderPolicyTabs(){
+    const wrap = document.querySelector(POLICY_TAB_WRAP_SELECTOR);
+    if (!wrap) return;
+    const adminMode = getVisibleAdminMode();
+    if (!policyCategories.length) {
+      wrap.innerHTML = adminMode
+        ? '<button class="btn-admin add" style="margin:0; padding:6px 12px; width:auto;" onclick="addPolicyCategory(event)">+ 카테고리 추가</button>'
+        : '<div class="p-tab active">정책 카테고리 없음</div>';
+      return;
+    }
+    const desired = policyCategories.some(c => c.code === activePolicyCategory) ? activePolicyCategory : (policyCategories[0].code || 'mobile');
+    activePolicyCategory = desired;
+    const tabsHtml = policyCategories.map(cat => `
+      <div class="p-tab ${cat.code === desired ? 'active' : ''}" data-policy-code="${esc(cat.code)}" onclick="switchPolicyTab(this, '${esc(cat.code)}')">
+        <span>${esc(cat.name || cat.code)}</span>
+        ${adminMode ? `<button type="button" class="btn-admin del" style="margin-left:6px; padding:2px 8px; width:auto; font-size:11px;" onclick="deletePolicyCategory(event, '${esc(cat.code)}')">삭제</button>` : ''}
+      </div>
+    `).join('');
+    const addBtnHtml = adminMode ? '<button class="btn-admin add" style="margin:0 0 0 8px; padding:6px 12px; width:auto;" onclick="addPolicyCategory(event)">+ 카테고리 추가</button>' : '';
+    wrap.innerHTML = tabsHtml + addBtnHtml;
+  }
+
+  function renderPolicyList(){
+    const wrap = document.getElementById(POLICY_LIST_ID);
+    if (!wrap) return;
+    const rows = policyRows.filter(row => (row.category_code || '') === activePolicyCategory);
+    if (!rows.length) {
+      wrap.innerHTML = '<div style="padding:16px; text-align:center; color:#999; font-size:13px;">등록된 정책이 없습니다.</div>';
+      return;
+    }
+    wrap.innerHTML = rows.map(row => {
+      const badgeLabel = policyCategories.find(cat => cat.code === row.category_code)?.name || row.category_code || '';
+      return `
+        <div class="list-item list-item-search" data-policy-id="${row.id}" onclick="openPolicyDetail(${row.id})">
+          <div class="list-title-wrap"><span class="list-badge">${esc(badgeLabel)}</span><span class="list-title">${esc(row.title || '제목 없음')}</span></div>
+          <div class="list-date">${fmtDate(row.created_at || row.updated_at)}</div>
+          <div class="admin-only admin-controls" onclick="event.stopPropagation();">
+            <button class="btn-admin edit" onclick="openPolicyEditor(${row.id})">수정</button>
+            <button class="btn-admin del" onclick="deletePolicyPost(event, ${row.id})">삭제</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  window.addPolicyCategory = async function(event){
+    event?.stopPropagation?.();
+    const name = (prompt('새 정책 카테고리명을 입력하세요.') || '').trim();
+    if (!name) return;
+    let code = (prompt('카테고리 코드값을 입력하세요. (영문/숫자/하이픈/언더스코어)', name.toLowerCase().replace(/\s+/g,'_')) || '').trim().toLowerCase();
+    code = code.replace(/[^a-z0-9_-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+    if (!code) {
+      alert('유효한 코드값이 필요합니다.');
+      return;
+    }
+    try {
+      if (policyCategories.some(cat => (cat.code || '').toLowerCase() === code)) {
+        alert('이미 사용 중인 카테고리 코드입니다.');
+        return;
+      }
+      const nextSort = (policyCategories.reduce((max, cat) => Math.max(max, Number(cat.sort_order || 0)), 0) || 0) + 1;
+      const { error } = await supabase.from('policy_categories').insert({
+        code,
+        name,
+        sort_order: nextSort,
+        is_visible: true
+      });
+      if (error) throw error;
+      activePolicyCategory = code;
+      await loadPolicyPage();
+      alert('정책 카테고리가 추가되었습니다.');
+    } catch (e) {
+      console.error(e);
+      alert('정책 카테고리 추가에 실패했습니다.');
+    }
+  };
+
+  window.deletePolicyCategory = async function(event, categoryCode){
+    event?.stopPropagation?.();
+    const target = policyCategories.find(cat => (cat.code || '') === String(categoryCode));
+    if (!target) return;
+    try {
+      const { count, error: countError } = await supabase
+        .from('policy_posts')
+        .select('id', { count: 'exact', head: true })
+        .eq('category_code', target.code);
+      if (countError) throw countError;
+      if ((count || 0) > 0) {
+        alert(`'${target.name || target.code}' 카테고리에 연결된 정책 ${count}건이 있어 삭제할 수 없습니다. 먼저 정책을 삭제하거나 다른 카테고리로 이동해주세요.`);
+        return;
+      }
+      if (!confirm(`'${target.name || target.code}' 카테고리를 삭제할까요?`)) return;
+      const { error } = await supabase.from('policy_categories').delete().eq('code', target.code);
+      if (error) throw error;
+      if (activePolicyCategory === target.code) {
+        activePolicyCategory = policyCategories.filter(cat => cat.code !== target.code)[0]?.code || '';
+      }
+      await loadPolicyPage();
+      alert('정책 카테고리가 삭제되었습니다.');
+    } catch (e) {
+      console.error(e);
+      alert('정책 카테고리 삭제에 실패했습니다.');
+    }
+  };
+
+  window.switchPolicyTab = function(tab, category){
+    activePolicyCategory = category || activePolicyCategory;
+    const tabs = (tab?.parentElement || document.querySelector(POLICY_TAB_WRAP_SELECTOR))?.querySelectorAll('.p-tab') || [];
+    tabs.forEach(t => t.classList.toggle('active', (t.dataset.policyCode || '') === activePolicyCategory));
+    renderPolicyList();
+  };
+
+  function buildDetailHtml(post, images, options = {}){
+    const imgList = (images || []).map(normalizeImgUrl).filter(Boolean);
+    const sliderId = `detail-slider-${post.id}`;
+    const dotsId = `detail-dots-${post.id}`;
+    const use45Frame = !!options.use45Frame;
+    const sliderHtml = imgList.length ? `
+      <div class="slider-container">
+        <div class="slider-wrapper" id="${sliderId}">
+          ${imgList.map((src, idx) => {
+            const inner = use45Frame
+              ? `<div class="board-viewer-frame"><img class="slider-img" src="${esc(src)}" alt="이미지 ${idx+1}" data-viewer-index="${idx}"></div>`
+              : `<img class="slider-img" src="${esc(src)}" alt="이미지 ${idx+1}" data-viewer-index="${idx}">`;
+            const style = use45Frame ? ' style="height:auto; background:transparent; padding:0;"' : '';
+            return `<div class="slider-item"${style}>${inner}</div>`;
+          }).join('')}
+        </div>
+        <div class="slider-dots" id="${dotsId}"></div>
+      </div>` : '';
+    const summaryText = post.summary ? `<div style="font-size:13px; color:#666; margin:0 0 14px 0; line-height:1.6;">${esc(post.summary)}</div>` : '';
+    const contentHtml = post.body_html || `<div style="color:#999;">등록된 내용이 없습니다.</div>`;
+    return { html: `${sliderHtml}${summaryText}<div class="content-text-box">${contentHtml}</div>`, sliderId, dotsId, imgList };
+  }
+
+  function bindDetailSlider(areaSelector, sliderId, dotsId, images){
+    if (!sliderId || !images?.length) return;
+    if (typeof window.generateDots === 'function') window.generateDots(`#${sliderId}`, `#${dotsId}`, 'dot');
+    if (typeof window.bindScrollDots === 'function') window.bindScrollDots(`#${sliderId}`, `#${dotsId}`, 'dot');
+    document.querySelectorAll(`${areaSelector} .slider-img[data-viewer-index]`).forEach(function(imgEl){
+      imgEl.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        const idx = Number(this.dataset.viewerIndex || 0);
+        if (typeof window.openImageViewer === 'function') window.openImageViewer(images, idx);
+        else if (typeof window.openZoomModal === 'function') {
+          window._sliderData = images.map(src => ({ image_url: src }));
+          window._sliderIndex = idx;
+          window.openZoomModal(idx);
+        }
+      });
+    });
+  }
+
+  async function openNoticeDetail(noticeId){
+    try {
+      const { data: post, error } = await supabase.from('notice_posts').select('*').eq('id', noticeId).single();
+      if (error) throw error;
+      const images = await fetchNoticeImages(noticeId);
+      currentNoticePost = post;
+      const area = document.getElementById(NOTICE_DETAIL_AREA_ID);
+      if (!area) return;
+      const built = buildDetailHtml(post, images, { use45Frame: true });
+      area.innerHTML = built.html;
+      document.getElementById('notice-detail-title').innerText = post.title || '공지사항';
+      const controls = document.getElementById('notice-detail-controls');
+      if (controls) controls.innerHTML = `<button class="btn-admin btn-edit-content" style="background:var(--uplus-dark); padding:6px 12px;" onclick="openNoticeEditor(${post.id})">editor3에서 편집하기</button>`;
+      bindDetailSlider('#' + NOTICE_DETAIL_AREA_ID, built.sliderId, built.dotsId, built.imgList);
+      window.goToPage('page-notice-detail', -1, post.title || '공지사항');
+    } catch (e) {
+      console.error(e);
+      alert('공지사항을 불러오지 못했습니다.');
+    }
+  }
+  window.openNoticeDetail = openNoticeDetail;
+
+  async function openPolicyDetail(policyId){
+    try {
+      const { data: post, error } = await supabase.from('policy_posts').select('*').eq('id', policyId).single();
+      if (error) throw error;
+      const images = await fetchPolicyImages(policyId);
+      currentPolicyPost = post;
+      const area = document.getElementById(POLICY_DETAIL_AREA_ID);
+      if (!area) return;
+      const built = buildDetailHtml(post, images);
+      area.innerHTML = built.html;
+      document.getElementById('policy-detail-title').innerText = post.title || '정책';
+      const controls = document.getElementById('policy-detail-controls');
+      if (controls) controls.innerHTML = `<button class="btn-admin btn-edit-content" style="background:var(--uplus-dark); padding:6px 12px;" onclick="openPolicyEditor(${post.id})">editor4에서 편집하기</button>`;
+      bindDetailSlider('#' + POLICY_DETAIL_AREA_ID, built.sliderId, built.dotsId, built.imgList);
+      window.goToPage('page-policy-detail', -1, post.title || '정책');
+    } catch (e) {
+      console.error(e);
+      alert('정책을 불러오지 못했습니다.');
+    }
+  }
+  window.openPolicyDetail = openPolicyDetail;
+
+  window.openNoticeEditor = function(postId){
+    const url = postId ? `editor3.html?id=${encodeURIComponent(postId)}` : 'editor3.html';
+    window.location.href = url;
+  };
+  window.openPolicyEditor = function(postId){
+    let url = 'editor4.html';
+    if (postId) url += `?id=${encodeURIComponent(postId)}`;
+    else if (activePolicyCategory) url += `?category_code=${encodeURIComponent(activePolicyCategory)}`;
+    window.location.href = url;
+  };
+
+  async function deleteNoticePost(event, postId){
+    event?.stopPropagation?.();
+    if (!confirm('이 공지사항을 삭제하시겠습니까? 연결된 이미지도 함께 삭제되며 복구할 수 없습니다.')) return;
+    try {
+      const images = await fetchNoticeImages(postId);
+      await removeStoragePaths(images.map(v => v.image_path));
+      const { error } = await supabase.from('notice_posts').delete().eq('id', postId);
+      if (error) throw error;
+      await loadNoticePage();
+      if (currentNoticePost && Number(currentNoticePost.id) === Number(postId)) window.goToPage(NOTICE_PAGE_ID, -1, '공지사항');
+      alert('공지사항이 삭제되었습니다.');
+    } catch (e) {
+      console.error(e);
+      alert('공지사항 삭제에 실패했습니다.');
+    }
+  }
+  window.deleteNoticePost = deleteNoticePost;
+
+  async function deletePolicyPost(event, postId){
+    event?.stopPropagation?.();
+    if (!confirm('이 정책을 삭제하시겠습니까? 연결된 이미지도 함께 삭제되며 복구할 수 없습니다.')) return;
+    try {
+      const images = await fetchPolicyImages(postId);
+      await removeStoragePaths(images.map(v => v.image_path));
+      const { error } = await supabase.from('policy_posts').delete().eq('id', postId);
+      if (error) throw error;
+      await loadPolicyPage();
+      if (currentPolicyPost && Number(currentPolicyPost.id) === Number(postId)) window.goToPage(POLICY_PAGE_ID, -1, '정책');
+      alert('정책이 삭제되었습니다.');
+    } catch (e) {
+      console.error(e);
+      alert('정책 삭제에 실패했습니다.');
+    }
+  }
+  window.deletePolicyPost = deletePolicyPost;
+
+  async function loadNoticePage(){
+    noticeRows = await fetchNoticePosts();
+    renderNoticeList();
+  }
+
+  async function loadPolicyPage(){
+    policyCategories = await fetchPolicyCategories();
+    policyRows = await fetchPolicyPosts();
+    renderPolicyTabs();
+    renderPolicyList();
+  }
+
+  const originalGoToPage = window.goToPage;
+  window.goToPage = function(pageId, navIndex, titleText){
+    originalGoToPage(pageId, navIndex, titleText);
+    if (pageId === NOTICE_PAGE_ID) loadNoticePage().catch(err => console.error(err));
+    if (pageId === POLICY_PAGE_ID) loadPolicyPage().catch(err => console.error(err));
+  };
+
+  document.addEventListener('DOMContentLoaded', async function(){
+    try {
+      await Promise.all([loadNoticePage(), loadPolicyPage()]);
+      const params = new URLSearchParams(location.search);
+      const openNoticeId = Number(params.get('open_notice_id') || 0);
+      const openPolicyId = Number(params.get('open_policy_id') || 0);
+      if (openNoticeId) {
+        await openNoticeDetail(openNoticeId);
+        document.body.classList.add('route-ready');
+        return;
+      }
+      if (openPolicyId) {
+        await openPolicyDetail(openPolicyId);
+        document.body.classList.add('route-ready');
+        return;
+      }
+      const initialHash = (location.hash || '').replace('#','');
+      if (initialHash === NOTICE_PAGE_ID) {
+        window.goToPage(NOTICE_PAGE_ID, -1, '공지사항');
+      } else if (initialHash === POLICY_PAGE_ID) {
+        window.goToPage(POLICY_PAGE_ID, 5, '정책');
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      document.body.classList.add('route-ready');
+    }
   });
 })();
 </script>

@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Policy Editor</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+
+  :root{
+    --uplus-magenta:#e6007e;
+    --uplus-dark:#2f2f35;
+    --line:#e7e7ec;
+    --bg:#f7f7fb;
+    --card:#ffffff;
+    --muted:#6f7480;
+    --danger:#c53b58;
+    --pending:#f1f3f5;
+    --add:#eef8ff;
+    --ok:#1b7f4a;
+    --warn:#a86400;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:#222}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px}
+  .topbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap}
+  .title{font-size:24px;font-weight:800}
+  .subtitle{font-size:13px;color:var(--muted);margin-top:4px}
+  .row{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+  .col-main{flex:1 1 720px;min-width:0}
+  .col-side{width:340px;max-width:100%;display:flex;flex-direction:column;gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 6px 16px rgba(0,0,0,.04)}
+  .card-header{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+  .label{font-size:13px;color:var(--muted);margin-bottom:8px;font-weight:700}
+  .label-row{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px}
+  .hint{font-size:12px;color:var(--muted)}
+  input[type="text"], input[type="number"], textarea, select{width:100%;border:1px solid #d9dce3;border-radius:12px;padding:12px;font-size:14px;background:#fff}
+  textarea{min-height:100px;resize:vertical}
+  .grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .btn{border:none;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}
+  .btn-primary{background:var(--uplus-magenta);color:#fff}
+  .btn-dark{background:var(--uplus-dark);color:#fff}
+  .btn-light{background:#fff;border:1px solid #d9dce3;color:#333}
+  .btn-danger{background:#fff1f4;border:1px solid #f0b7c5;color:var(--danger)}
+  .btn-ghost{background:#f3f4f7;color:#333}
+  .btn-ok{background:#edf8f1;border:1px solid #b6dfc7;color:var(--ok)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .editor{min-height:360px;border:1px solid #d9dce3;border-radius:14px;padding:14px;background:#fff;line-height:1.7}
+  .editor:focus{outline:2px solid rgba(230,0,126,.15);border-color:#e7b0c7}
+  .editor h2{font-size:22px;margin:1em 0 .55em}
+  .editor p{margin:.7em 0}
+  .editor ul,.editor ol{padding-left:20px;margin:.7em 0}
+  .box-strong,.box-tip,.box-warn{padding:12px 14px;border-radius:12px;margin:10px 0}
+  .box-strong{border:1px solid #e7b0c7;background:#fff1f7}
+  .box-tip{border:1px solid #b9ddff;background:#eef7ff}
+  .box-warn{border:1px solid #ffd0a8;background:#fff6ed}
+  .image-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .image-card{border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff;position:relative}
+  .image-card img{width:100%;aspect-ratio:4 / 5;object-fit:cover;border-radius:10px;background:#f2f2f2;cursor:default}
+  .image-card.pending-delete{background:var(--pending);opacity:.65}
+  .image-card.pending-add{background:var(--add)}
+  .badge{position:absolute;top:8px;left:8px;background:var(--uplus-dark);color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:999px}
+  .badge.delete{background:#7a7d86}
+  .badge.add{background:#1a76d2}
+  .badge.keep{background:#2f2f35}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .status{font-size:13px;color:var(--muted)}
+  .status.ok{color:var(--ok)}
+  .status.warn{color:var(--warn)}
+  .status.danger{color:var(--danger)}
+  .hidden{display:none !important}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-size:12px;font-weight:700}
+  .footer{position:sticky;bottom:0;background:rgba(247,247,251,.92);backdrop-filter:blur(6px);padding-top:12px;margin-top:18px}
+  .notice{padding:12px 14px;border-radius:12px;background:#f8f9fb;border:1px solid var(--line);font-size:13px;line-height:1.6;color:#444}
+  .size-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#f3f4f7;border:1px solid #d9dce3;font-size:12px;color:#4a4f5a;font-weight:700}
+  @media (max-width:768px){
+    .wrap{padding:14px}
+    .title{font-size:20px}
+    .editor{min-height:260px}
+    .grid-2{grid-template-columns:1fr}
+  }
+
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="title">editor4 · 정책 편집</div>
+      <div id="editorPath" class="subtitle">불러오는 중...</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-light" type="button" onclick="goBack()">목록으로</button>
+      <button class="btn btn-primary" type="button" onclick="savePolicy()">저장</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-main">
+      <div class="card">
+        <div class="grid-2">
+          <div>
+            <div class="label">정책 카테고리</div>
+            <select id="categorySelect"></select>
+          </div>
+          <div>
+            <div class="label">정렬 순서</div>
+            <input id="sortOrderInput" type="number" min="0" step="1" placeholder="0" />
+          </div>
+        </div>
+
+        <div style="height:12px;"></div>
+        <div class="label">제목</div>
+        <input id="titleInput" type="text" placeholder="정책 제목을 입력하세요" />
+
+        <div style="height:12px;"></div>
+        <div class="label">요약문</div>
+        <textarea id="summaryInput" placeholder="정책 목록에 보여줄 요약문을 입력하세요"></textarea>
+
+        <div style="height:12px;"></div>
+        <div class="label-row">
+          <div class="label" style="margin:0;">본문</div>
+          <div class="hint">TIP / 주의 / 강조 박스에서 엔터를 치면 일반 본문으로 이어집니다.</div>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-ghost" type="button" onclick="formatBlockTag('h2')">제목</button>
+          <button class="btn btn-ghost" type="button" onclick="formatBlockTag('p')">본문</button>
+          <button class="btn btn-ghost" type="button" onclick="execCmd('bold')">굵게</button>
+          <button class="btn btn-ghost" type="button" onclick="execCmd('insertUnorderedList')">목록</button>
+          <button class="btn btn-ghost" type="button" onclick="insertBlock('tip')">TIP</button>
+          <button class="btn btn-ghost" type="button" onclick="insertBlock('warn')">주의</button>
+          <button class="btn btn-ghost" type="button" onclick="insertBlock('strong')">강조</button>
+        </div>
+        <div id="editorText" class="editor" contenteditable="true"></div>
+      </div>
+    </div>
+
+    <div class="col-side">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="label" style="margin-bottom:6px;">이미지</div>
+            <div class="hint">4:5 비율 이미지 여러 장 등록 가능 · 첫 번째 이미지가 대표 이미지로 저장됩니다.</div>
+          </div>
+          <span class="size-chip">권장 비율 4:5</span>
+        </div>
+        <div style="height:12px;"></div>
+        <div class="actions">
+          <label class="btn btn-light" style="display:inline-flex;align-items:center;">
+            이미지 추가
+            <input id="imageInput" type="file" accept="image/*" multiple class="hidden" />
+          </label>
+        </div>
+        <div style="height:12px;"></div>
+        <div id="imageGrid" class="image-grid"></div>
+      </div>
+
+      <div class="card">
+        <div class="label">운영 옵션</div>
+        <div class="actions" style="margin-top:0;">
+          <label class="pill"><input id="pinnedCheckbox" type="checkbox" style="margin-right:6px;" /> 상단 고정</label>
+          <label class="pill"><input id="visibleCheckbox" type="checkbox" style="margin-right:6px;" checked /> 노출</label>
+        </div>
+        <div style="height:12px;"></div>
+        <div id="modeStatus" class="notice">불러오는 중...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div id="saveStatus" class="status">변경 사항 없음</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-light" type="button" onclick="goBack()">목록으로</button>
+        <button class="btn btn-primary" type="button" onclick="savePolicy()">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+
+const SUPABASE_URL = 'https://ytnxmnbctujuopbqpurl.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_4oBm89ecivuVF6StOBz7yg_qNBItC4z';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const STORAGE_BUCKET = 'board-assets';
+const ADMIN_RETURN_BASE = (() => {
+  const fromQuery = new URLSearchParams(location.search).get('admin_return') || '';
+  if (fromQuery.trim()) return fromQuery.trim();
+  try {
+    const ref = document.referrer || '';
+    if (ref) {
+      const u = new URL(ref);
+      const name = (u.pathname.split('/').pop() || '').trim();
+      if (name) return name;
+    }
+  } catch (e) {}
+  return 'admin.html';
+})();
+let currentId = null;
+let editingMode = 'create';
+let dirty = false;
+let suppressBeforeUnload = false;
+function qs(key){ return new URLSearchParams(location.search).get(key); }
+function escapeHtml(value = ''){
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+function slugify(value = ''){
+  return String(value).toLowerCase().trim()
+    .replace(/[^a-z0-9가-힣]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'item';
+}
+function setDirty(next = true){
+  dirty = next;
+  const el = document.getElementById('saveStatus');
+  if (!el) return;
+  if (next) suppressBeforeUnload = false;
+  if (dirty) {
+    el.textContent = '저장되지 않은 변경 사항이 있습니다.';
+    el.className = 'status warn';
+  } else {
+    el.textContent = '변경 사항 없음';
+    el.className = 'status ok';
+  }
+}
+function execCmd(cmd){ document.execCommand(cmd, false, null); setDirty(true); }
+function formatBlockTag(tag){ document.execCommand('formatBlock', false, '<' + tag + '>'); setDirty(true); }
+function insertBlock(type){
+  const classes = {strong:'box-strong', tip:'box-tip', warn:'box-warn'};
+  const labels = {strong:'강조 내용을 입력하세요', tip:'TIP 내용을 입력하세요', warn:'주의 내용을 입력하세요'};
+  const html = `<div class="${classes[type]}">${labels[type]}</div><p><br></p>`;
+  document.execCommand('insertHTML', false, html);
+  setDirty(true);
+}
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  const sel = window.getSelection?.();
+  if (!sel || !sel.anchorNode) return;
+  const target = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+  const box = target?.closest?.('.box-strong, .box-tip, .box-warn');
+  if (!box) return;
+  event.preventDefault();
+  document.execCommand('insertHTML', false, '</div><p><br></p>');
+  setDirty(true);
+});
+function bindCommonDirtyEvents(ids){
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => setDirty(true));
+  });
+  ['pinnedCheckbox','visibleCheckbox'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => setDirty(true));
+  });
+  document.getElementById('editorText').addEventListener('input', () => setDirty(true));
+  document.getElementById('imageInput').addEventListener('change', onImagesSelected);
+  window.addEventListener('beforeunload', (e) => {
+    if (!dirty || suppressBeforeUnload) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+}
+function activeImageCount(){
+  return draft.images.filter(item => item._status !== 'delete').length;
+}
+function renderImages(){
+  const grid = document.getElementById('imageGrid');
+  const rows = draft.images || [];
+  if (!rows.length) {
+    grid.innerHTML = '<div class="notice">등록된 이미지가 없습니다. 4:5 비율 이미지를 1장 이상 등록해주세요.</div>';
+    return;
+  }
+  grid.innerHTML = rows.map((item, index) => {
+    const pendingDelete = item._status === 'delete';
+    const pendingAdd = item._status === 'add';
+    return `
+      <div class="image-card ${pendingDelete ? 'pending-delete' : ''} ${pendingAdd ? 'pending-add' : ''}">
+        <div class="badge ${pendingDelete ? 'delete' : pendingAdd ? 'add' : 'keep'}">${pendingDelete ? '삭제예정' : pendingAdd ? '새 파일' : index + 1}</div>
+        <img src="${escapeHtml(item.url)}" alt="image-${index + 1}" />
+        <div class="actions">
+          <button class="btn btn-light" type="button" onclick="moveImage(${index}, -1)" ${index === 0 ? 'disabled' : ''}>앞으로</button>
+          <button class="btn btn-light" type="button" onclick="moveImage(${index}, 1)" ${index === rows.length - 1 ? 'disabled' : ''}>뒤로</button>
+          <button class="btn ${pendingDelete ? 'btn-light' : 'btn-danger'}" type="button" onclick="toggleImageDelete(${index})">${pendingDelete ? '삭제취소' : '삭제'}</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+function moveImage(index, direction){
+  const target = index + direction;
+  if (target < 0 || target >= draft.images.length) return;
+  const clone = [...draft.images];
+  [clone[index], clone[target]] = [clone[target], clone[index]];
+  draft.images = clone;
+  renderImages();
+  setDirty(true);
+}
+function toggleImageDelete(index){
+  const item = draft.images[index];
+  if (!item) return;
+  if (item._status === 'delete') {
+    item._status = item.id ? 'keep' : 'add';
+  } else if (item._status === 'add' && !item.id) {
+    if (item.url?.startsWith?.('blob:')) {
+      try { URL.revokeObjectURL(item.url); } catch (_) {}
+    }
+    draft.images.splice(index, 1);
+  } else {
+    item._status = 'delete';
+  }
+  renderImages();
+  setDirty(true);
+}
+async function validateAndPrepareFiles(files){
+  const accepted = [];
+  for (const file of files) {
+    const ok = await checkImageRatio(file);
+    if (!ok) return null;
+    accepted.push(file);
+  }
+  return accepted;
+}
+function checkImageRatio(file){
+  return new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const ratio = img.naturalWidth / img.naturalHeight;
+      URL.revokeObjectURL(objectUrl);
+      resolve(Math.abs(ratio - (4 / 5)) < 0.03);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(false);
+    };
+    img.src = objectUrl;
+  });
+}
+async function onImagesSelected(event){
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+  const checked = await validateAndPrepareFiles(files);
+  if (!checked) {
+    alert('이미지는 4:5 비율로 업로드해주세요.');
+    event.target.value = '';
+    return;
+  }
+  checked.forEach(file => {
+    draft.images.push({
+      id: null,
+      url: URL.createObjectURL(file),
+      path: '',
+      sort_order: draft.images.length,
+      file,
+      _status: 'add'
+    });
+  });
+  renderImages();
+  setDirty(true);
+  event.target.value = '';
+}
+async function uploadAsset(file, postKey, assetGroup, folderName){
+  const safeName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+  const path = `${folderName}/${postKey}/${assetGroup}/${safeName}`;
+  const { error } = await supabaseClient.storage.from(STORAGE_BUCKET).upload(path, file, { upsert: false });
+  if (error) throw error;
+  const { data } = supabaseClient.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+  return { url: data.publicUrl, path };
+}
+async function safeRemoveFiles(paths){
+  const clean = [...new Set(paths.filter(Boolean))];
+  if (!clean.length) return;
+  const { error } = await supabaseClient.storage.from(STORAGE_BUCKET).remove(clean);
+  if (error) console.warn('Storage remove warning:', error);
+}
+
+const TABLE_CATEGORIES = 'policy_categories';
+const TABLE_POSTS = 'policy_posts';
+const TABLE_IMAGES = 'policy_post_images';
+let draft = {
+  category_code: '',
+  title: '',
+  summary: '',
+  body_html: '',
+  status: 'published',
+  is_visible: true,
+  is_pinned: false,
+  sort_order: 0,
+  images: []
+};
+function updateEditorPath(){
+  const categoryName = document.getElementById('categorySelect')?.selectedOptions?.[0]?.textContent || '카테고리';
+  const title = draft.title || '새 정책';
+  document.getElementById('editorPath').textContent = `정책 > ${categoryName} > ${editingMode === 'edit' ? '수정' : '새 글 작성'} > ${title}`;
+}
+function bindDirtyEvents(){
+  bindCommonDirtyEvents(['titleInput','summaryInput','sortOrderInput']);
+  document.getElementById('categorySelect').addEventListener('change', () => setDirty(true));
+}
+async function populateCategorySelect(selectedCode = ''){
+  const select = document.getElementById('categorySelect');
+  const { data, error } = await supabaseClient
+    .from(TABLE_CATEGORIES)
+    .select('code,name,is_visible,sort_order')
+    .eq('is_visible', true)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+  if (error) {
+    console.error(error);
+    select.innerHTML = '<option value="">카테고리를 불러오지 못했습니다</option>';
+    return;
+  }
+  const options = data || [];
+  select.innerHTML = '<option value="">카테고리 선택</option>' + options.map(item => `<option value="${escapeHtml(item.code)}">${escapeHtml(item.name || item.code)}</option>`).join('');
+  const preset = selectedCode || qs('category_code') || '';
+  if (preset) select.value = preset;
+  updateEditorPath();
+}
+function collectFormValues(){
+  draft.category_code = document.getElementById('categorySelect').value || '';
+  draft.title = document.getElementById('titleInput').value.trim();
+  draft.summary = document.getElementById('summaryInput').value.trim();
+  draft.body_html = document.getElementById('editorText').innerHTML.trim();
+  draft.status = 'published';
+  draft.is_visible = document.getElementById('visibleCheckbox').checked;
+  draft.is_pinned = document.getElementById('pinnedCheckbox').checked;
+  draft.sort_order = Number(document.getElementById('sortOrderInput').value || 0);
+}
+function renderAll(){
+  document.getElementById('titleInput').value = draft.title || '';
+  document.getElementById('summaryInput').value = draft.summary || '';
+  document.getElementById('sortOrderInput').value = Number(draft.sort_order || 0);
+  document.getElementById('visibleCheckbox').checked = !!draft.is_visible;
+  document.getElementById('pinnedCheckbox').checked = !!draft.is_pinned;
+  document.getElementById('editorText').innerHTML = draft.body_html || '';
+  document.getElementById('categorySelect').value = draft.category_code || '';
+  renderImages();
+  updateEditorPath();
+}
+function validateDraft(){
+  collectFormValues();
+  if (!draft.category_code) {
+    alert('정책 카테고리를 선택해야 합니다.');
+    return false;
+  }
+  if (!draft.title) {
+    alert('제목을 입력해주세요.');
+    return false;
+  }
+  if (!draft.summary) {
+    alert('요약문을 입력해주세요.');
+    return false;
+  }
+  if (activeImageCount() < 1) {
+    alert('이미지는 1장 이상 등록해야 합니다.');
+    return false;
+  }
+  const plainText = draft.body_html.replace(/<[^>]+>/g, '').trim();
+  if (!plainText) {
+    alert('본문을 입력해주세요.');
+    return false;
+  }
+  return true;
+}
+function buildAdminUrl(){
+  const base = ADMIN_RETURN_BASE || 'admin.html';
+  const separator = base.includes('?') ? '&' : '?';
+  return `${base}${separator}open_policy_id=${currentId}`;
+}
+function goBack(){
+  if (dirty && !confirm('저장되지 않은 변경 사항이 있습니다. 목록으로 돌아갈까요?')) return;
+  if (window.history.length > 1) {
+    window.history.back();
+    return;
+  }
+  location.href = ADMIN_RETURN_BASE || 'admin.html';
+}
+async function loadPolicy(postId){
+  const { data: post, error: postError } = await supabaseClient.from(TABLE_POSTS).select('*').eq('id', postId).single();
+  if (postError || !post) {
+    console.error(postError);
+    alert('정책을 불러오지 못했습니다.');
+    return;
+  }
+  const { data: images, error: imageError } = await supabaseClient
+    .from(TABLE_IMAGES)
+    .select('*')
+    .eq('post_id', postId)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  if (imageError) {
+    console.error(imageError);
+    alert('정책 이미지 목록을 불러오지 못했습니다.');
+    return;
+  }
+  draft.category_code = post.category_code || '';
+  draft.title = post.title || '';
+  draft.summary = post.summary || '';
+  draft.body_html = post.body_html || '';
+  draft.status = post.status || 'published';
+  draft.is_visible = post.is_visible !== false;
+  draft.is_pinned = !!post.is_pinned;
+  draft.sort_order = Number(post.sort_order || 0);
+  draft.images = (images || []).map(item => ({
+    id: item.id,
+    url: item.image_url,
+    path: item.image_path || '',
+    sort_order: Number(item.sort_order || 0),
+    file: null,
+    _status: 'keep'
+  }));
+  await populateCategorySelect(draft.category_code);
+  renderAll();
+  setDirty(false);
+}
+async function savePolicy(){
+  if (!validateDraft()) return;
+  const saveStatus = document.getElementById('saveStatus');
+  saveStatus.textContent = '저장 중...';
+  saveStatus.className = 'status';
+  try {
+    let savedId = currentId;
+    const basePayload = {
+      category_code: draft.category_code,
+      title: draft.title,
+      summary: draft.summary,
+      body_html: draft.body_html,
+      status: 'published',
+      is_visible: draft.is_visible,
+      is_pinned: draft.is_pinned,
+      sort_order: draft.sort_order
+    };
+    if (savedId) {
+      const { error } = await supabaseClient.from(TABLE_POSTS).update(basePayload).eq('id', savedId);
+      if (error) throw error;
+    } else {
+      const { data, error } = await supabaseClient.from(TABLE_POSTS).insert(basePayload).select('id').single();
+      if (error) throw error;
+      savedId = data.id;
+      currentId = savedId;
+      editingMode = 'edit';
+      document.getElementById('modeStatus').textContent = '기존 정책 수정 모드입니다. 저장 시 기존 데이터가 갱신됩니다.';
+    }
+
+    const previousImagePathsToDelete = [];
+    const orderedImages = [];
+    for (let index = 0; index < draft.images.length; index += 1) {
+      const item = draft.images[index];
+      if (item._status === 'delete') {
+        if (item.path) previousImagePathsToDelete.push(item.path);
+        if (item.id) {
+          const { error } = await supabaseClient.from(TABLE_IMAGES).delete().eq('id', item.id);
+          if (error) throw error;
+        }
+        continue;
+      }
+      let nextUrl = item.url;
+      let nextPath = item.path || '';
+      if (item.file) {
+        const uploaded = await uploadAsset(item.file, savedId, 'images', 'policies');
+        nextUrl = uploaded.url;
+        nextPath = uploaded.path;
+      }
+      const rowPayload = {
+        post_id: savedId,
+        image_url: nextUrl,
+        image_path: nextPath,
+        sort_order: orderedImages.length,
+        alt_text: draft.title || `policy-${orderedImages.length + 1}`
+      };
+      if (item.id) {
+        const { error } = await supabaseClient.from(TABLE_IMAGES).update(rowPayload).eq('id', item.id);
+        if (error) throw error;
+        orderedImages.push({ ...item, url: nextUrl, path: nextPath, sort_order: orderedImages.length, file: null, _status: 'keep' });
+      } else {
+        const { data, error } = await supabaseClient.from(TABLE_IMAGES).insert(rowPayload).select('id').single();
+        if (error) throw error;
+        orderedImages.push({ id: data.id, url: nextUrl, path: nextPath, sort_order: orderedImages.length, file: null, _status: 'keep' });
+      }
+    }
+
+    const firstImage = orderedImages[0] || null;
+    const { error: postCoverError } = await supabaseClient.from(TABLE_POSTS).update({
+      cover_image_url: firstImage ? firstImage.url : null,
+      cover_image_path: firstImage ? firstImage.path : null
+    }).eq('id', savedId);
+    if (postCoverError) throw postCoverError;
+
+    if (previousImagePathsToDelete.length) {
+      await safeRemoveFiles(previousImagePathsToDelete);
+    }
+
+    draft.images = orderedImages;
+    renderAll();
+    setDirty(false);
+    saveStatus.textContent = '저장 완료';
+    saveStatus.className = 'status ok';
+    const nextUrl = buildAdminUrl();
+    suppressBeforeUnload = true;
+    location.replace(nextUrl);
+  } catch (error) {
+    console.error(error);
+    saveStatus.textContent = '저장 실패';
+    saveStatus.className = 'status danger';
+    alert(`저장 중 오류가 발생했습니다.\n${error.message || error}`);
+  }
+}
+async function init(){
+  bindDirtyEvents();
+  await populateCategorySelect();
+  const rawId = Number(qs('id') || 0);
+  if (rawId > 0) {
+    currentId = rawId;
+    editingMode = 'edit';
+    document.getElementById('modeStatus').textContent = '기존 정책 수정 모드입니다. 저장 시 기존 데이터가 갱신됩니다.';
+    await loadPolicy(rawId);
+  } else {
+    draft.category_code = qs('category_code') || '';
+    document.getElementById('modeStatus').textContent = '새 정책 작성 모드입니다. 저장 시 새 정책이 생성됩니다.';
+    renderAll();
+    setDirty(false);
+  }
+}
+init();
+</script>
+</body>
+</html>
