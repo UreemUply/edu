@@ -185,19 +185,7 @@ const SUPABASE_URL = 'https://ytnxmnbctujuopbqpurl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_4oBm89ecivuVF6StOBz7yg_qNBItC4z';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const STORAGE_BUCKET = 'board-assets';
-const ADMIN_RETURN_BASE = (() => {
-  const fromQuery = new URLSearchParams(location.search).get('admin_return') || '';
-  if (fromQuery.trim()) return fromQuery.trim();
-  try {
-    const ref = document.referrer || '';
-    if (ref) {
-      const u = new URL(ref);
-      const name = (u.pathname.split('/').pop() || '').trim();
-      if (name) return name;
-    }
-  } catch (e) {}
-  return 'admin.html';
-})();
+
 let currentId = null;
 let editingMode = 'create';
 let dirty = false;
@@ -451,10 +439,7 @@ function buildAdminUrl(){
   return `${base}${separator}open_policy_id=${currentId}`;
 }
 function goBack(){
-  if (dirty && !confirm('저장되지 않은 변경 사항이 있습니다. 목록으로 돌아갈까요?')) return;
-  if (window.history.length > 1) {
-    window.history.back();
-    return;
+  location.href = 'admin.html#page-policy';
   }
   location.href = ADMIN_RETURN_BASE || 'admin.html';
 }
