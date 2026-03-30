@@ -4183,7 +4183,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
       currentPolicyPost = post;
       const area = document.getElementById(POLICY_DETAIL_AREA_ID);
       if (!area) return;
-      const built = buildDetailHtml(post, images);
+      const built = buildDetailHtml(post, images, { use45Frame: true });
       area.innerHTML = built.html;
       document.getElementById('policy-detail-title').innerText = post.title || '정책';
       const controls = document.getElementById('policy-detail-controls');
