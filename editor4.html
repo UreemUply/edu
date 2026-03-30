@@ -331,9 +331,7 @@ function checkImageRatio(file){
     const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
-      const ratio = img.naturalWidth / img.naturalHeight;
       URL.revokeObjectURL(objectUrl);
-      resolve(Math.abs(ratio - (4 / 5)) < 0.03);
     };
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
@@ -347,7 +345,6 @@ async function onImagesSelected(event){
   if (!files.length) return;
   const checked = await validateAndPrepareFiles(files);
   if (!checked) {
-    alert('이미지는 4:5 비율로 업로드해주세요.');
     event.target.value = '';
     return;
   }
