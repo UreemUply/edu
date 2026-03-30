@@ -255,7 +255,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
             <div class="logo">유림텔레콤 <span>Class</span></div>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <div class="header-user-profile" onclick="handleProfileClick()">
-                    <span id="logged-user-name">이주석</span> 님
+                    <span id="logged-user-name">사용자</span> 님
                 </div>
                 <button class="btn-sm btn-outline" style="padding: 6px 10px; font-size:12px; border-radius:20px; cursor:pointer;" onclick="doLogout()">로그아웃</button>
             </div>
@@ -325,7 +325,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
     <div id="page-mypage" class="page container">
         <div class="sub-header"><div class="sub-title">마이페이지</div></div>
         <div class="form-box">
-            <div style="text-align: center; margin-bottom: 24px;"><div style="font-size: 20px; font-weight: 700; color: var(--uplus-magenta);"><span id="mypage-user-name">이주석</span> 님</div></div>
+            <div style="text-align: center; margin-bottom: 24px;"><div style="font-size: 20px; font-weight: 700; color: var(--uplus-magenta);"><span id="mypage-user-name">사용자</span> 님</div></div>
             <label class="form-label">매장 변경</label>
             <select class="store-select form-input"></select>
             <label class="form-label">연락처 변경</label>
@@ -543,7 +543,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
     </nav>
 
     <script>
-        let currentUserName = "이주석";
+        let currentUserName = "사용자";
         let isAdmin = false; 
         let diagnosticUrl = "https://ureemuply.github.io/lguenvet-pro/";
         let testUrl = "https://ureemuply.github.io/lguenvet-pro/";
@@ -562,7 +562,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
         window.onload = function() {
             isAdmin = false;
             document.body.classList.remove('admin-mode');
-            currentUserName = "이주석";
+            currentUserName = "사용자";
             updateUserNameUI();
             syncNoticesToHome();
             updateStoreDropdowns();
@@ -3353,7 +3353,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
 </script>
 
 
-<script id="oai-board-front-db-patch">
+<script id="oai-board-admin-db-patch">
 (function(){
   const supabase = window.supabaseClient;
   if (!supabase) return;
@@ -3383,6 +3383,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
     }
   };
 
+  const BOARD_BY_TABS = Object.fromEntries(Object.values(BOARD_VIEWS).map(v => [v.tabsId, v]));
   const BOARD_BY_CONTAINER = Object.fromEntries(Object.values(BOARD_VIEWS).map(v => [v.containerId, v]));
   const activeBoardState = {};
   let currentViewerPost = null;
@@ -3394,6 +3395,16 @@ html.route-direct-content body.route-ready{visibility:visible;}
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;');
+  }
+
+  function buildPublicUrl(path) {
+    if (!path) return '';
+    try {
+      const { data } = supabase.storage.from('board-assets').getPublicUrl(path);
+      return data?.publicUrl || '';
+    } catch(e) {
+      return '';
+    }
   }
 
   async function fetchBoardCategories(boardType) {
@@ -3414,7 +3425,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
       .select('*')
       .eq('board_type', boardType)
       .eq('is_visible', true)
-      .eq('status', 'published')
+      .in('status', ['draft', 'published'])
       .order('is_pinned', { ascending: false })
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false });
@@ -3434,9 +3445,12 @@ html.route-direct-content body.route-ready{visibility:visible;}
       html += `
         <div class="level-tab ${isActive ? 'active' : ''}" data-cat="${cat.id}" onclick="switchCategoryTab(this, '${cat.id}', '${cfg.containerId}')">
           <span class="tab-name">${escapeHtml(cat.name || '')}</span>
+          <span class="admin-only edit-tab" onclick="editCategoryTab(event, this)">✏️</span>
+          <span class="admin-only del-level" onclick="deleteCategoryTab(event, this, '${cfg.containerId}')">X</span>
         </div>
       `;
     });
+    html += `<button class="admin-only btn-admin add" style="width:auto; margin:0; padding: 4px 12px; font-size:12px;" onclick="addCategoryTab('${cfg.tabsId}')">+ 추가</button>`;
     wrap.innerHTML = html;
   }
 
@@ -3456,6 +3470,11 @@ html.route-direct-content body.route-ready{visibility:visible;}
         <div class="img-card-btn list-item-search" data-post-id="${post.id}" data-category="${cat}" onclick="openBoardPostViewer(${post.id})">
           <img src="${img}" alt="cover">
           <div class="img-card-overlay"><div class="img-card-title">${title}</div><div class="img-card-desc">${summary}</div></div>
+          <div class="admin-only admin-controls" style="position:absolute; top:10px; right:10px;" onclick="event.stopPropagation();">
+            <button class="btn-admin edit" style="background:var(--uplus-dark);" onclick="openBoardPostEditor(${post.id})">수정</button>
+            <button class="btn-admin edit" onclick="changeCategory(event, this, '${cfg.tabsId}', '${cfg.containerId}')">카테고리 이동</button>
+            <button class="btn-admin del" onclick="deleteBoardPost(event, ${post.id})">삭제</button>
+          </div>
         </div>
       `;
     }).join('');
@@ -3497,20 +3516,162 @@ html.route-direct-content body.route-ready{visibility:visible;}
     });
   };
 
+  window.addCategoryTab = async function(tabContainerId) {
+    const cfg = BOARD_BY_TABS[tabContainerId];
+    if (!cfg) return;
+    const title = prompt('추가할 카테고리 이름을 입력하세요:');
+    if (!title || !title.trim()) return;
+    try {
+      const clean = title.trim();
+      const { data:lastRow } = await supabase
+        .from('board_categories')
+        .select('sort_order')
+        .eq('board_type', cfg.boardType)
+        .order('sort_order', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const nextSort = (lastRow?.sort_order || 0) + 1;
+      const { error } = await supabase.from('board_categories').insert({
+        board_type: cfg.boardType,
+        name: clean,
+        sort_order: nextSort,
+        is_visible: true
+      });
+      if (error) throw error;
+      activeBoardState[cfg.boardType] = 'all';
+      await loadBoardPage(Object.keys(BOARD_VIEWS).find(k => BOARD_VIEWS[k].tabsId === tabContainerId), true);
+      alert('카테고리가 추가되었습니다.');
+    } catch (e) {
+      console.error(e);
+      if (String(e.message || '').includes('uq_board_categories_type_name')) {
+        alert('같은 메뉴 안에 동일한 카테고리명이 이미 존재합니다.');
+      } else {
+        alert('카테고리 추가에 실패했습니다.');
+      }
+    }
+  };
+
+  window.editCategoryTab = async function(event, btn) {
+    event.stopPropagation();
+    const tab = btn.closest('.level-tab');
+    const categoryId = tab?.dataset.cat;
+    if (!categoryId || categoryId === 'all') return;
+    const nameSpan = tab.querySelector('.tab-name');
+    const newName = prompt('카테고리 이름을 수정하세요:', nameSpan?.innerText || '');
+    if (!newName || !newName.trim()) return;
+    try {
+      const { error } = await supabase.from('board_categories').update({ name: newName.trim() }).eq('id', categoryId);
+      if (error) throw error;
+      const cfg = BOARD_BY_TABS[tab.parentElement.id];
+      await loadBoardPage(Object.keys(BOARD_VIEWS).find(k => BOARD_VIEWS[k].tabsId === cfg.tabsId));
+    } catch (e) {
+      console.error(e);
+      if (String(e.message || '').includes('uq_board_categories_type_name')) {
+        alert('같은 메뉴 안에 동일한 카테고리명이 이미 존재합니다.');
+      } else {
+        alert('카테고리 수정에 실패했습니다.');
+      }
+    }
+  };
+
+  async function removeBoardAssetsByPosts(postIds) {
+    if (!postIds.length) return;
+    const { data:posts } = await supabase.from('board_posts').select('thumbnail_path').in('id', postIds);
+    const { data:images } = await supabase.from('board_post_images').select('image_path').in('post_id', postIds);
+    const paths = [];
+    (posts || []).forEach(p => { if (p.thumbnail_path) paths.push(p.thumbnail_path); });
+    (images || []).forEach(i => { if (i.image_path) paths.push(i.image_path); });
+    const uniq = [...new Set(paths.filter(Boolean))];
+    if (uniq.length) {
+      const { error } = await supabase.storage.from('board-assets').remove(uniq);
+      if (error) console.warn('storage remove warning', error);
+    }
+  }
+
+  window.deleteCategoryTab = async function(event, btn, listContainerId) {
+    event.stopPropagation();
+    const cfg = BOARD_BY_CONTAINER[listContainerId];
+    const tab = btn.closest('.level-tab');
+    const categoryId = Number(tab?.dataset.cat || 0);
+    if (!cfg || !categoryId) return;
+    try {
+      const { data:posts, error:countErr } = await supabase.from('board_posts').select('id').eq('category_id', categoryId);
+      if (countErr) throw countErr;
+      const count = (posts || []).length;
+      const ok = confirm(`이 카테고리를 삭제하면 하위 콘텐츠 ${count}개와 연결 이미지가 함께 삭제되며 복구할 수 없습니다. 삭제하시겠습니까?`);
+      if (!ok) return;
+      await removeBoardAssetsByPosts((posts || []).map(p => p.id));
+      const { error } = await supabase.from('board_categories').delete().eq('id', categoryId);
+      if (error) throw error;
+      activeBoardState[cfg.boardType] = 'all';
+      await loadBoardPage(Object.keys(BOARD_VIEWS).find(k => BOARD_VIEWS[k].containerId === listContainerId), true);
+      alert('카테고리가 삭제되었습니다.');
+    } catch(e) {
+      console.error(e);
+      alert('카테고리 삭제에 실패했습니다.');
+    }
+  };
+
+  window.addCardRow = function(containerId, tabContainerId) {
+    const cfg = BOARD_BY_CONTAINER[containerId] || BOARD_BY_TABS[tabContainerId];
+    if (!cfg) return;
+    const activeTab = document.querySelector(`#${cfg.tabsId} .level-tab.active`);
+    const activeCat = activeTab && activeTab.dataset.cat !== 'all' ? activeTab.dataset.cat : '';
+    let url = `editor2.html?board_type=${encodeURIComponent(cfg.boardType)}`;
+    if (activeCat) url += `&category_id=${encodeURIComponent(activeCat)}`;
+    window.location.href = url;
+  };
+
+  window.openBoardPostEditor = function(postId) {
+    window.location.href = `editor2.html?id=${encodeURIComponent(postId)}`;
+  };
+
+  window.changeCategory = async function(event, btn, tabContainerId, listContainerId) {
+    event.stopPropagation();
+    const cfg = BOARD_BY_CONTAINER[listContainerId];
+    if (!cfg) return;
+    const card = btn.closest('.img-card-btn');
+    const postId = Number(card?.dataset.postId || 0);
+    const tabs = Array.from(document.querySelectorAll(`#${tabContainerId} .level-tab`)).filter(t => t.dataset.cat && t.dataset.cat !== 'all');
+    if (!postId) return;
+    if (!tabs.length) { alert('이동할 카테고리가 없습니다.'); return; }
+    let text = '이동할 카테고리 번호를 선택하세요:\n';
+    tabs.forEach((t, i) => { text += `${i+1}. ${t.querySelector('.tab-name').innerText}\n`; });
+    const sel = prompt(text);
+    const idx = Number(sel) - 1;
+    if (!(idx >= 0 && idx < tabs.length)) return;
+    const categoryId = tabs[idx].dataset.cat;
+    try {
+      const { error } = await supabase.from('board_posts').update({ category_id: Number(categoryId) }).eq('id', postId);
+      if (error) throw error;
+      await loadBoardPage(Object.keys(BOARD_VIEWS).find(k => BOARD_VIEWS[k].containerId === listContainerId));
+    } catch(e) {
+      console.error(e);
+      alert('카테고리 이동에 실패했습니다.');
+    }
+  };
+
+  window.deleteBoardPost = async function(event, postId) {
+    event.stopPropagation();
+    const ok = confirm('이 자료를 삭제하시겠습니까? 연결된 이미지도 함께 삭제되며 복구할 수 없습니다.');
+    if (!ok) return;
+    try {
+      await removeBoardAssetsByPosts([postId]);
+      const { error } = await supabase.from('board_posts').delete().eq('id', postId);
+      if (error) throw error;
+      const activePage = document.querySelector('.page.active')?.id;
+      if (activePage && BOARD_VIEWS[activePage]) await loadBoardPage(activePage);
+      alert('자료가 삭제되었습니다.');
+    } catch(e) {
+      console.error(e);
+      alert('자료 삭제에 실패했습니다.');
+    }
+  };
+
   async function fetchPostDetail(postId) {
-    const { data: post, error: postErr } = await supabase
-      .from('board_posts')
-      .select('*')
-      .eq('id', postId)
-      .eq('is_visible', true)
-      .eq('status', 'published')
-      .single();
+    const { data: post, error: postErr } = await supabase.from('board_posts').select('*').eq('id', postId).single();
     if (postErr) throw postErr;
-    const { data: images, error: imgErr } = await supabase
-      .from('board_post_images')
-      .select('*')
-      .eq('post_id', postId)
-      .order('sort_order', { ascending: true });
+    const { data: images, error: imgErr } = await supabase.from('board_post_images').select('*').eq('post_id', postId).order('sort_order', { ascending: true });
     if (imgErr) throw imgErr;
     return { post, images: images || [] };
   }
@@ -3533,13 +3694,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
 
   async function openBoardPostById(postId) {
     if (!postId) return;
-    const { data: post, error } = await supabase
-      .from('board_posts')
-      .select('id, board_type, category_id, is_visible, status')
-      .eq('id', postId)
-      .eq('is_visible', true)
-      .eq('status', 'published')
-      .single();
+    const { data: post, error } = await supabase.from('board_posts').select('id, board_type, category_id').eq('id', postId).single();
     if (error || !post) {
       if (error) console.error(error);
       return;
@@ -3562,7 +3717,9 @@ html.route-direct-content body.route-ready{visibility:visible;}
       document.getElementById('viewer-title').innerText = post.title || '상세 보기';
       document.getElementById('page-fullscreen-dynamic-area').innerHTML = renderPostDetail(post, safeImages);
       const controls = document.querySelector('#page-fullscreen-viewer .admin-controls');
-      if (controls) controls.innerHTML = '';
+      if (controls) {
+        controls.innerHTML = `<button class="btn-admin edit" style="background:var(--uplus-dark); padding:6px 12px;" onclick="openBoardPostEditor(${post.id})">editor2에서 편집하기</button>`;
+      }
       if (typeof generateDots === 'function') generateDots('#page-fullscreen-dynamic-area .fs-slider', '#page-fullscreen-dynamic-area .fs-dots', 'fs-dot');
       if (typeof bindScrollDots === 'function') bindScrollDots('#page-fullscreen-dynamic-area .fs-slider', '#page-fullscreen-dynamic-area .fs-dots', 'fs-dot');
       document.querySelectorAll('#page-fullscreen-dynamic-area .fs-item img[data-viewer-index]').forEach(function(imgEl){
@@ -3597,6 +3754,328 @@ html.route-direct-content body.route-ready{visibility:visible;}
       return;
     }
     Object.keys(BOARD_VIEWS).forEach(pageId => loadBoardPage(pageId, true));
+  });
+})();
+</script>
+
+
+<script>
+(() => {
+  const supabase = (window.supabaseClient || window.supabase || null);
+  if (!supabase) return;
+
+  const NOTICE_LIST_ID = 'notice-list-container';
+  const HOME_NOTICE_ID = 'home-notice-list';
+  const POLICY_LIST_ID = 'policy-list-container';
+  const NOTICE_DETAIL_AREA_ID = 'page-notice-dynamic-area';
+  const POLICY_DETAIL_AREA_ID = 'page-policy-dynamic-area';
+  const POLICY_TAB_WRAP_SELECTOR = '#page-policy .policy-category-tabs';
+  const NOTICE_PAGE_ID = 'page-notice-list';
+  const POLICY_PAGE_ID = 'page-policy';
+
+  let noticeRows = [];
+  let policyCategories = [];
+  let policyRows = [];
+  let activePolicyCategory = 'mobile';
+  let currentNoticePost = null;
+  let currentPolicyPost = null;
+
+  function esc(str=''){
+    return String(str)
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'",'&#039;');
+  }
+  function fmtDate(v){
+    if (!v) return '';
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return '';
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${m}.${day}`;
+  }
+  function buildPublicUrl(path){
+    if (!path) return '';
+    try {
+      const { data } = supabase.storage.from('board-assets').getPublicUrl(path);
+      return data?.publicUrl || '';
+    } catch (e) { return ''; }
+  }
+  function normalizeImgUrl(row){
+    return row?.image_url || buildPublicUrl(row?.image_path) || '';
+  }
+
+  async function fetchNoticePosts(){
+    const { data, error } = await supabase
+      .from('notice_posts')
+      .select('*')
+      .eq('status', 'published')
+      .eq('is_visible', true)
+      .order('is_pinned', { ascending:false })
+      .order('sort_order', { ascending:true })
+      .order('created_at', { ascending:false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function fetchNoticeImages(postId){
+    const { data, error } = await supabase
+      .from('notice_post_images')
+      .select('*')
+      .eq('post_id', postId)
+      .order('sort_order', { ascending:true })
+      .order('created_at', { ascending:true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function fetchPolicyCategories(){
+    const { data, error } = await supabase
+      .from('policy_categories')
+      .select('*')
+      .eq('is_visible', true)
+      .order('sort_order', { ascending:true })
+      .order('created_at', { ascending:true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function fetchPolicyPosts(){
+    const { data, error } = await supabase
+      .from('policy_posts')
+      .select('*')
+      .eq('status', 'published')
+      .eq('is_visible', true)
+      .order('is_pinned', { ascending:false })
+      .order('sort_order', { ascending:true })
+      .order('created_at', { ascending:false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function fetchPolicyImages(postId){
+    const { data, error } = await supabase
+      .from('policy_post_images')
+      .select('*')
+      .eq('post_id', postId)
+      .order('sort_order', { ascending:true })
+      .order('created_at', { ascending:true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  function renderNoticeList(){
+    const wrap = document.getElementById(NOTICE_LIST_ID);
+    if (!wrap) return;
+    if (!noticeRows.length) {
+      wrap.innerHTML = '<div style="padding:16px; text-align:center; color:#999; font-size:13px;">등록된 공지사항이 없습니다.</div>';
+      syncNoticesToHome();
+      return;
+    }
+    wrap.innerHTML = noticeRows.map(row => {
+      const badge = row.badge_text ? `<span class="list-badge">${esc(row.badge_text)}</span>` : '';
+      return `
+        <div class="list-item list-item-search" data-notice-id="${row.id}" onclick="openNoticeDetail(${row.id})">
+          <div class="list-title-wrap">${badge}<span class="list-title">${esc(row.title || '제목 없음')}</span></div>
+          <div class="list-date">${fmtDate(row.created_at || row.updated_at)}</div>
+        </div>`;
+    }).join('');
+    syncNoticesToHome();
+  }
+
+  function syncNoticesToHome(){
+    const homeContainer = document.getElementById(HOME_NOTICE_ID);
+    if (!homeContainer) return;
+    const source = noticeRows.slice(0, 3);
+    if (!source.length) {
+      homeContainer.innerHTML = '<div style="padding:16px; text-align:center; color:#999; font-size:13px;">등록된 공지사항이 없습니다.</div>';
+      return;
+    }
+    homeContainer.innerHTML = source.map(row => {
+      const badge = row.badge_text ? `<span class="list-badge">${esc(row.badge_text)}</span>` : '';
+      return `
+        <div class="list-item" data-notice-id="${row.id}" onclick="openNoticeDetail(${row.id})">
+          <div class="list-title-wrap">${badge}<span class="list-title">${esc(row.title || '제목 없음')}</span></div>
+          <div class="list-date">${fmtDate(row.created_at || row.updated_at)}</div>
+        </div>`;
+    }).join('');
+  }
+  window.syncNoticesToHome = syncNoticesToHome;
+
+  function renderPolicyTabs(){
+    const wrap = document.querySelector(POLICY_TAB_WRAP_SELECTOR);
+    if (!wrap) return;
+    if (!policyCategories.length) {
+      wrap.innerHTML = '<div class="p-tab active">정책 카테고리 없음</div>';
+      return;
+    }
+    const desired = policyCategories.some(c => c.code === activePolicyCategory) ? activePolicyCategory : (policyCategories[0].code || 'mobile');
+    activePolicyCategory = desired;
+    wrap.innerHTML = policyCategories.map(cat => `
+      <div class="p-tab ${cat.code === desired ? 'active' : ''}" data-policy-code="${esc(cat.code)}" onclick="switchPolicyTab(this, '${esc(cat.code)}')">
+        <span>${esc(cat.name || cat.code)}</span>
+      </div>
+    `).join('');
+  }
+
+  function renderPolicyList(){
+    const wrap = document.getElementById(POLICY_LIST_ID);
+    if (!wrap) return;
+    const rows = policyRows.filter(row => (row.category_code || '') === activePolicyCategory);
+    if (!rows.length) {
+      wrap.innerHTML = '<div style="padding:16px; text-align:center; color:#999; font-size:13px;">등록된 정책이 없습니다.</div>';
+      return;
+    }
+    wrap.innerHTML = rows.map(row => {
+      const badgeLabel = policyCategories.find(cat => cat.code === row.category_code)?.name || row.category_code || '';
+      return `
+        <div class="list-item list-item-search" data-policy-id="${row.id}" onclick="openPolicyDetail(${row.id})">
+          <div class="list-title-wrap"><span class="list-badge">${esc(badgeLabel)}</span><span class="list-title">${esc(row.title || '제목 없음')}</span></div>
+          <div class="list-date">${fmtDate(row.created_at || row.updated_at)}</div>
+        </div>`;
+    }).join('');
+  }
+
+  window.switchPolicyTab = function(tab, category){
+    activePolicyCategory = category || activePolicyCategory;
+    const tabs = (tab?.parentElement || document.querySelector(POLICY_TAB_WRAP_SELECTOR))?.querySelectorAll('.p-tab') || [];
+    tabs.forEach(t => t.classList.toggle('active', (t.dataset.policyCode || '') === activePolicyCategory));
+    renderPolicyList();
+  };
+
+  function buildDetailHtml(post, images, options = {}){
+    const imgList = (images || []).map(normalizeImgUrl).filter(Boolean);
+    const sliderId = `detail-slider-${post.id}`;
+    const dotsId = `detail-dots-${post.id}`;
+    const use45Frame = !!options.use45Frame;
+    const sliderHtml = imgList.length ? `
+      <div class="slider-container">
+        <div class="slider-wrapper" id="${sliderId}">
+          ${imgList.map((src, idx) => {
+            const inner = use45Frame
+              ? `<div class="board-viewer-frame"><img class="slider-img" src="${esc(src)}" alt="이미지 ${idx+1}" data-viewer-index="${idx}"></div>`
+              : `<img class="slider-img" src="${esc(src)}" alt="이미지 ${idx+1}" data-viewer-index="${idx}">`;
+            const style = use45Frame ? ' style="height:auto; background:transparent; padding:0;"' : '';
+            return `<div class="slider-item"${style}>${inner}</div>`;
+          }).join('')}
+        </div>
+        <div class="slider-dots" id="${dotsId}"></div>
+      </div>` : '';
+    const summaryText = post.summary ? `<div style="font-size:13px; color:#666; margin:0 0 14px 0; line-height:1.6;">${esc(post.summary)}</div>` : '';
+    const contentHtml = post.body_html || `<div style="color:#999;">등록된 내용이 없습니다.</div>`;
+    return { html: `${sliderHtml}${summaryText}<div class="content-text-box">${contentHtml}</div>`, sliderId, dotsId, imgList };
+  }
+
+  function bindDetailSlider(areaSelector, sliderId, dotsId, images){
+    if (!sliderId || !images?.length) return;
+    if (typeof window.generateDots === 'function') window.generateDots(`#${sliderId}`, `#${dotsId}`, 'dot');
+    if (typeof window.bindScrollDots === 'function') window.bindScrollDots(`#${sliderId}`, `#${dotsId}`, 'dot');
+    document.querySelectorAll(`${areaSelector} .slider-img[data-viewer-index]`).forEach(function(imgEl){
+      imgEl.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        const idx = Number(this.dataset.viewerIndex || 0);
+        if (typeof window.openImageViewer === 'function') window.openImageViewer(images, idx);
+        else if (typeof window.openZoomModal === 'function') {
+          window._sliderData = images.map(src => ({ image_url: src }));
+          window._sliderIndex = idx;
+          window.openZoomModal(idx);
+        }
+      });
+    });
+  }
+
+  async function openNoticeDetail(noticeId){
+    try {
+      const { data: post, error } = await supabase.from('notice_posts').select('*').eq('id', noticeId).single();
+      if (error) throw error;
+      const images = await fetchNoticeImages(noticeId);
+      currentNoticePost = post;
+      const area = document.getElementById(NOTICE_DETAIL_AREA_ID);
+      if (!area) return;
+      const built = buildDetailHtml(post, images, { use45Frame: true });
+      area.innerHTML = built.html;
+      document.getElementById('notice-detail-title').innerText = post.title || '공지사항';
+      const controls = document.getElementById('notice-detail-controls');
+      if (controls) controls.innerHTML = '';
+      bindDetailSlider('#' + NOTICE_DETAIL_AREA_ID, built.sliderId, built.dotsId, built.imgList);
+      window.goToPage('page-notice-detail', -1, post.title || '공지사항');
+    } catch (e) {
+      console.error(e);
+      alert('공지사항을 불러오지 못했습니다.');
+    }
+  }
+  window.openNoticeDetail = openNoticeDetail;
+
+  async function openPolicyDetail(policyId){
+    try {
+      const { data: post, error } = await supabase.from('policy_posts').select('*').eq('id', policyId).single();
+      if (error) throw error;
+      const images = await fetchPolicyImages(policyId);
+      currentPolicyPost = post;
+      const area = document.getElementById(POLICY_DETAIL_AREA_ID);
+      if (!area) return;
+      const built = buildDetailHtml(post, images, { use45Frame: true });
+      area.innerHTML = built.html;
+      document.getElementById('policy-detail-title').innerText = post.title || '정책';
+      const controls = document.getElementById('policy-detail-controls');
+      if (controls) controls.innerHTML = '';
+      bindDetailSlider('#' + POLICY_DETAIL_AREA_ID, built.sliderId, built.dotsId, built.imgList);
+      window.goToPage('page-policy-detail', -1, post.title || '정책');
+    } catch (e) {
+      console.error(e);
+      alert('정책을 불러오지 못했습니다.');
+    }
+  }
+  window.openPolicyDetail = openPolicyDetail;
+
+  async function loadNoticePage(){
+    noticeRows = await fetchNoticePosts();
+    renderNoticeList();
+  }
+
+  async function loadPolicyPage(){
+    policyCategories = await fetchPolicyCategories();
+    policyRows = await fetchPolicyPosts();
+    renderPolicyTabs();
+    renderPolicyList();
+  }
+
+  const prevGoToPage = window.goToPage;
+  window.goToPage = function(pageId, navIndex, titleText){
+    prevGoToPage(pageId, navIndex, titleText);
+    if (pageId === NOTICE_PAGE_ID) loadNoticePage().catch(err => console.error(err));
+    if (pageId === POLICY_PAGE_ID) loadPolicyPage().catch(err => console.error(err));
+  };
+
+  document.addEventListener('DOMContentLoaded', async function(){
+    try {
+      await Promise.all([loadNoticePage(), loadPolicyPage()]);
+      const params = new URLSearchParams(location.search);
+      const openNoticeId = Number(params.get('open_notice_id') || 0);
+      const openPolicyId = Number(params.get('open_policy_id') || 0);
+      if (openNoticeId) {
+        await openNoticeDetail(openNoticeId);
+        document.body.classList.add('route-ready');
+        return;
+      }
+      if (openPolicyId) {
+        await openPolicyDetail(openPolicyId);
+        document.body.classList.add('route-ready');
+        return;
+      }
+      const initialHash = (location.hash || '').replace('#','');
+      if (initialHash === NOTICE_PAGE_ID) {
+        window.goToPage(NOTICE_PAGE_ID, -1, '공지사항');
+      } else if (initialHash === POLICY_PAGE_ID) {
+        window.goToPage(POLICY_PAGE_ID, 5, '정책');
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      document.body.classList.add('route-ready');
+    }
   });
 })();
 </script>
