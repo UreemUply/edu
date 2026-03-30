@@ -167,7 +167,8 @@
         .viewer-track::-webkit-scrollbar { display:none; }
         .viewer-slide { flex:0 0 100%; height:100%; display:flex; justify-content:center; align-items:center; scroll-snap-align:center; scroll-snap-stop:always; }
         .viewer-slide.is-interacting img { transition:none; }
-        .viewer-zoom-shell { width:100%; height:100%; display:flex; justify-content:center; align-items:center; overflow:hidden; touch-action:none; }
+        .viewer-zoom-shell { width:100%; height:100%; display:flex; justify-content:center; align-items:center; overflow:hidden; touch-action:pan-x pan-y; }
+        .viewer-slide.zoom-active .viewer-zoom-shell { touch-action:none; }
         .viewer-slide img { width:100%; height:100%; object-fit:contain; user-select:none; -webkit-user-drag:none; transform-origin:center center; transition:transform .2s ease; }
         .viewer-hit { position:absolute; top:0; bottom:0; width:22%; z-index:10000; cursor:pointer; pointer-events:auto; }
         .viewer-hit.left { left:0; }
@@ -2802,10 +2803,13 @@ html.route-direct-content body.route-ready{visibility:visible;}
     const img = document.getElementById('slider-image');
     if(!surface || !img) return;
 
-    let startX = 0, startY = 0, moved = false;
+    let startX = 0, startY = 0, moved = false, touchHandled = false;
     surface.addEventListener('touchstart', (e) => {
       const t = e.touches[0];
-      startX = t.clientX; startY = t.clientY; moved = false;
+      startX = t.clientX;
+      startY = t.clientY;
+      moved = false;
+      touchHandled = false;
     }, { passive:true });
 
     surface.addEventListener('touchmove', (e) => {
@@ -2817,26 +2821,27 @@ html.route-direct-content body.route-ready{visibility:visible;}
       const t = e.changedTouches[0];
       const diffX = t.clientX - startX;
       const absX = Math.abs(diffX);
-      const rect = surface.getBoundingClientRect();
-      const touchX = t.clientX - rect.left;
+
+      touchHandled = true;
 
       if(absX > 40){
-        if(diffX > 0) prevImage(); else nextImage();
+        if(diffX > 0) prevImage();
+        else nextImage();
         return;
       }
+
       if(!moved){
-        if(touchX < rect.width * 0.3) prevImage();
-        else if(touchX > rect.width * 0.7) nextImage();
-        else openZoomModal(window._sliderIndex);
+        openZoomModal(window._sliderIndex);
       }
     }, { passive:true });
 
-    surface.addEventListener('click', (e) => {
-      const rect = surface.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      if(x < rect.width * 0.3) prevImage();
-      else if(x > rect.width * 0.7) nextImage();
-      else openZoomModal(window._sliderIndex);
+    surface.addEventListener('click', () => {
+      if(touchHandled){
+        touchHandled = false;
+        return;
+      }
+
+      openZoomModal(window._sliderIndex);
     });
   }
 
@@ -2938,7 +2943,11 @@ html.route-direct-content body.route-ready{visibility:visible;}
     const modal = document.getElementById('image-viewer-modal');
     const active = imageViewerSlideStates[imageViewerIndex];
     const zoomed = !!(active && active.scale > 1.01);
-    modal.classList.toggle('zoomed', zoomed);
+    if (modal) modal.classList.toggle('zoomed', zoomed);
+
+    imageViewerSlideStates.forEach((state, i) => {
+      state.slideEl.classList.toggle('zoom-active', zoomed && i === imageViewerIndex);
+    });
   }
 
   function bindViewerGestureHandlers(state) {
@@ -3161,6 +3170,8 @@ html.route-direct-content body.route-ready{visibility:visible;}
   window.closeZoomModal = function(){
     closeImageViewer();
   };
+  window.closeImageViewer = closeImageViewer;
+  window.moveImageViewer = moveImageViewer;
 
   document.getElementById('image-viewer-track').addEventListener('click', function(event) {
       event.stopPropagation();
