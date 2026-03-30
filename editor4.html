@@ -261,7 +261,7 @@ function renderImages(){
   const grid = document.getElementById('imageGrid');
   const rows = draft.images || [];
   if (!rows.length) {
-    grid.innerHTML = '<div class="notice">등록된 이미지가 없습니다. 4:5 비율 이미지를 1장 이상 등록해주세요.</div>';
+    grid.innerHTML = '<div class="notice">등록된 이미지가 없습니다. 이미지를 1장 이상 등록해주세요.</div>';
     return;
   }
   grid.innerHTML = rows.map((item, index) => {
@@ -434,14 +434,10 @@ function validateDraft(){
   return true;
 }
 function buildAdminUrl(){
-  const base = ADMIN_RETURN_BASE || 'admin.html';
-  const separator = base.includes('?') ? '&' : '?';
-  return `${base}${separator}open_policy_id=${currentId}`;
+  return `admin.html?open_policy_id=${currentId}`;
 }
 function goBack(){
   location.href = 'admin.html#page-policy';
-  }
-  location.href = ADMIN_RETURN_BASE || 'admin.html';
 }
 async function loadPolicy(postId){
   const { data: post, error: postError } = await supabaseClient.from(TABLE_POSTS).select('*').eq('id', postId).single();
