@@ -83,7 +83,7 @@
 
   .size-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#f3f4f7;border:1px solid #d9dce3;font-size:12px;color:#4a4f5a;font-weight:700}
   .thumb-size-title{font-size:12px;color:#6f7480;margin-bottom:8px;font-weight:700}
-  .image-card img{cursor:default}
+  .image-card img{cursor:pointer}
 
 </style>
 </head>
@@ -244,7 +244,7 @@ const ADMIN_RETURN_BASE = (() => {
       if (name) return name;
     }
   } catch(e) {}
-  return 'admin.html';
+  return 'admin_updated_popup.html';
 })();
 
 let currentPostId = null;
@@ -767,8 +767,8 @@ function buildAdminUrl(){
     params.set('open_post_id', String(currentPostId));
     params.set('open_post_mode', 'board');
   }
-  const base = ADMIN_RETURN_BASE || 'admin.html';
-  const cleanBase = base.split('#')[0].split('?')[0] || 'admin.html';
+  const base = ADMIN_RETURN_BASE || 'admin_updated_popup.html';
+  const cleanBase = base.split('#')[0].split('?')[0] || 'admin_updated_popup.html';
   return `${cleanBase}?${params.toString()}`;
 }
 
