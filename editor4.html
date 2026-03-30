@@ -141,9 +141,9 @@
         <div class="card-header">
           <div>
             <div class="label" style="margin-bottom:6px;">이미지</div>
-            <div class="hint">4:5 비율 이미지 여러 장 등록 가능 · 첫 번째 이미지가 대표 이미지로 저장됩니다.</div>
+            <div class="hint">여러 장 등록 가능 · 첫 번째 이미지가 대표 이미지로 저장됩니다.</div>
           </div>
-          <span class="size-chip">권장 비율 4:5(800*1000, 1080*1350)</span>
+          <span class="size-chip">권장 사이즈 800×1000, 1080×1350</span>
         </div>
         <div style="height:12px;"></div>
         <div class="actions">
@@ -318,27 +318,7 @@ function toggleImageDelete(index){
   setDirty(true);
 }
 async function validateAndPrepareFiles(files){
-  const accepted = [];
-  for (const file of files) {
-    const ok = await checkImageRatio(file);
-    if (!ok) return null;
-    accepted.push(file);
-  }
-  return accepted;
-}
-function checkImageRatio(file){
-  return new Promise((resolve) => {
-    const objectUrl = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve(false);
-    };
-    img.src = objectUrl;
-  });
+  return Array.from(files || []);
 }
 async function onImagesSelected(event){
   const files = Array.from(event.target.files || []);
