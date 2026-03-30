@@ -501,29 +501,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
         <div class="content-text-box">내용을 입력하세요. 자유롭게 편집 가능합니다.</div>
     </div>
 
-    <div id="template-page-content" style="display:none;">
-        <div class="slider-container">
-            <div class="slider-wrapper content-slider">
-                <div class="slider-item"><img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=600" class="slider-img"><span class="admin-only img-delete-overlay" onclick="deleteSliderImage(event, this)">삭제</span></div>
-                <div class="admin-only admin-add-img-btn" onclick="document.querySelector('#page-content-dynamic-area .file-upload').click()">+ 이미지 첨부</div>
-            </div>
-            <div class="slider-dots content-dots"></div>
-            <input type="file" class="file-upload" accept="image/*" style="display:none;" onchange="handleSliderImageUpload(event, false)">
-        </div>
-        <div class="content-text-box"><strong style="color: var(--uplus-magenta);">[학습 목표]</strong><br>해당 섹션의 기본기를 마스터하고 현장에 바로 적용할 수 있도록 숙지합니다.</div>
-        <div class="recommend-area"><div class="recommend-title">💡 추천 제안 <button class="admin-only btn-admin edit" style="margin-left:10px;" onclick="addKeyword()">+ 키워드 추가</button></div><div class="keyword-list content-keyword-list"></div></div>
-    </div>
-
-    <div id="template-page-fullscreen" style="display:none;">
-        <div class="fullscreen-viewer">
-            <div class="fs-slider fs-slider">
-                <div class="fs-item" style="position:relative;"><img src="https://images.unsplash.com/photo-1555774698-0b77e0d5fac6?q=80&w=600" alt="img1"><span class="admin-only img-delete-overlay" onclick="deleteFullscreenImage(event, this)">삭제</span></div>
-            </div>
-            <input type="file" class="file-upload" accept="image/*" style="display:none;" onchange="handleSliderImageUpload(event, true)">
-        </div>
-        <div class="fs-dots fs-dots"></div>
-        <div class="content-text-box">해당 자료의 텍스트 설명이 표시됩니다. 자유롭게 편집하세요.</div>
-    </div>
+    <!-- legacy board templates removed: editor2 / board_* 상세를 사용 -->
 
     <div id="page-content" class="page container">
         <div class="sub-header">
@@ -552,43 +530,8 @@ html.route-direct-content body.route-ready{visibility:visible;}
             <div class="admin-only admin-controls"><button class="btn-admin add" style="margin:0; padding:6px 12px; width:auto;" onclick="addCardRow('material-card-container', 'material-category-tabs')">+ 새 자료 등록</button></div>
             <div class="search-mini"><span class="icon">🔍</span><input type="text" placeholder="검색" oninput="filterSearch(this)"></div>
         </div>
-        <div class="level-tabs" id="material-category-tabs" style="margin-bottom: 20px;">
-            <div class="level-tab active" data-cat="all" onclick="switchCategoryTab(this, 'all', 'material-card-container')"><span class="tab-name">전체</span></div>
-            <div class="level-tab" data-cat="sales" onclick="switchCategoryTab(this, 'sales', 'material-card-container')">
-                <span class="tab-name">세일즈</span><span class="admin-only edit-tab" onclick="editCategoryTab(event, this)">✏️</span><span class="admin-only del-level" onclick="deleteCategoryTab(event, this, 'material-card-container')">X</span>
-            </div>
-            <div class="level-tab" data-cat="cs" onclick="switchCategoryTab(this, 'cs', 'material-card-container')">
-                <span class="tab-name">CS/응대</span><span class="admin-only edit-tab" onclick="editCategoryTab(event, this)">✏️</span><span class="admin-only del-level" onclick="deleteCategoryTab(event, this, 'material-card-container')">X</span>
-            </div>
-            <div class="level-tab" data-cat="admin_edu" onclick="switchCategoryTab(this, 'admin_edu', 'material-card-container')">
-                <span class="tab-name">전산/행정</span><span class="admin-only edit-tab" onclick="editCategoryTab(event, this)">✏️</span><span class="admin-only del-level" onclick="deleteCategoryTab(event, this, 'material-card-container')">X</span>
-            </div>
-            <button class="admin-only btn-admin add" style="width:auto; margin:0; padding: 4px 12px; font-size:12px;" onclick="addCategoryTab('material-category-tabs')">+ 추가</button>
-        </div>
-        <div class="card-list" id="material-card-container">
-            <div class="img-card-btn list-item-search" data-category="cs" onclick="openFullscreenViewer(this.querySelector('.img-card-title').innerText, this)">
-                <img src="https://images.unsplash.com/photo-1555774698-0b77e0d5fac6?q=80&w=600" alt="bg">
-                <div class="img-card-overlay"><div class="img-card-title">고객 응대 필수 스크립트</div><div class="img-card-desc">상황별 응대법 총정리</div></div>
-                <div class="admin-only admin-controls" style="position:absolute; top:10px; right:10px;" onclick="event.stopPropagation();">
-                    <input type="file" accept="image/*" style="display:none;" onchange="changeCardCover(event, this)">
-                    <button class="btn-admin edit" onclick="this.previousElementSibling.click()">커버변경</button>
-                    <button class="btn-admin edit" style="background:var(--uplus-dark);" onclick="changeCategory(event, this, 'material-category-tabs', 'material-card-container')">카테고리 이동</button>
-                    <button class="btn-admin edit" onclick="editListTitle(this)">제목수정</button>
-                    <button class="btn-admin del" onclick="this.closest('.img-card-btn').remove()">삭제</button>
-                </div>
-            </div>
-            <div class="img-card-btn list-item-search" data-category="sales" onclick="openFullscreenViewer(this.querySelector('.img-card-title').innerText, this)">
-                <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=600" alt="bg">
-                <div class="img-card-overlay"><div class="img-card-title">세일즈 성공 화법 10가지</div><div class="img-card-desc">성공적인 클로징 전략</div></div>
-                <div class="admin-only admin-controls" style="position:absolute; top:10px; right:10px;" onclick="event.stopPropagation();">
-                    <input type="file" accept="image/*" style="display:none;" onchange="changeCardCover(event, this)">
-                    <button class="btn-admin edit" onclick="this.previousElementSibling.click()">커버변경</button>
-                    <button class="btn-admin edit" style="background:var(--uplus-dark);" onclick="changeCategory(event, this, 'material-category-tabs', 'material-card-container')">카테고리 이동</button>
-                    <button class="btn-admin edit" onclick="editListTitle(this)">제목수정</button>
-                    <button class="btn-admin del" onclick="this.closest('.img-card-btn').remove()">삭제</button>
-                </div>
-            </div>
-        </div>
+        <div class="level-tabs" id="material-category-tabs" style="margin-bottom: 20px;"></div>
+        <div class="card-list" id="material-card-container"></div>
     </div>
 
     <div id="page-product-list" class="page container">
@@ -597,29 +540,8 @@ html.route-direct-content body.route-ready{visibility:visible;}
             <div class="admin-only admin-controls"><button class="btn-admin add" style="margin:0; padding:6px 12px; width:auto;" onclick="addCardRow('product-card-container', 'product-category-tabs')">+ 새 자료 등록</button></div>
             <div class="search-mini"><span class="icon">🔍</span><input type="text" placeholder="검색" oninput="filterSearch(this)"></div>
         </div>
-        <div class="level-tabs" id="product-category-tabs" style="margin-bottom: 20px;">
-            <div class="level-tab active" data-cat="all" onclick="switchCategoryTab(this, 'all', 'product-card-container')"><span class="tab-name">전체</span></div>
-            <div class="level-tab" data-cat="mobile_prod" onclick="switchCategoryTab(this, 'mobile_prod', 'product-card-container')">
-                <span class="tab-name">모바일</span><span class="admin-only edit-tab" onclick="editCategoryTab(event, this)">✏️</span><span class="admin-only del-level" onclick="deleteCategoryTab(event, this, 'product-card-container')">X</span>
-            </div>
-            <div class="level-tab" data-cat="home_prod" onclick="switchCategoryTab(this, 'home_prod', 'product-card-container')">
-                <span class="tab-name">스마트홈</span><span class="admin-only edit-tab" onclick="editCategoryTab(event, this)">✏️</span><span class="admin-only del-level" onclick="deleteCategoryTab(event, this, 'product-card-container')">X</span>
-            </div>
-            <button class="admin-only btn-admin add" style="width:auto; margin:0; padding: 4px 12px; font-size:12px;" onclick="addCategoryTab('product-category-tabs')">+ 추가</button>
-        </div>
-        <div class="card-list" id="product-card-container">
-            <div class="img-card-btn list-item-search" data-category="mobile_prod" onclick="openFullscreenViewer(this.querySelector('.img-card-title').innerText, this)">
-                <img src="https://images.unsplash.com/photo-1616423640778-28d1b53229bd?q=80&w=600" alt="bg">
-                <div class="img-card-overlay"><div class="img-card-title">단말기 비교표</div><div class="img-card-desc">핵심 포인트</div></div>
-                <div class="admin-only admin-controls" style="position:absolute; top:10px; right:10px;" onclick="event.stopPropagation();">
-                    <input type="file" accept="image/*" style="display:none;" onchange="changeCardCover(event, this)">
-                    <button class="btn-admin edit" onclick="this.previousElementSibling.click()">커버변경</button>
-                    <button class="btn-admin edit" style="background:var(--uplus-dark);" onclick="changeCategory(event, this, 'product-category-tabs', 'product-card-container')">카테고리 이동</button>
-                    <button class="btn-admin edit" onclick="editListTitle(this)">제목수정</button>
-                    <button class="btn-admin del" onclick="this.closest('.img-card-btn').remove()">삭제</button>
-                </div>
-            </div>
-        </div>
+        <div class="level-tabs" id="product-category-tabs" style="margin-bottom: 20px;"></div>
+        <div class="card-list" id="product-card-container"></div>
     </div>
 
     <div id="page-issues-list" class="page container">
@@ -628,38 +550,14 @@ html.route-direct-content body.route-ready{visibility:visible;}
             <div class="admin-only admin-controls"><button class="btn-admin add" style="margin:0; padding:6px 12px; width:auto;" onclick="addCardRow('issues-card-container', 'issues-category-tabs')">+ 새 자료 등록</button></div>
             <div class="search-mini"><span class="icon">🔍</span><input type="text" placeholder="검색" oninput="filterSearch(this)"></div>
         </div>
-        <div class="level-tabs" id="issues-category-tabs" style="margin-bottom: 20px;">
-            <div class="level-tab active" data-cat="all" onclick="switchCategoryTab(this, 'all', 'issues-card-container')"><span class="tab-name">전체</span></div>
-            <div class="level-tab" data-cat="voc_issue" onclick="switchCategoryTab(this, 'voc_issue', 'issues-card-container')">
-                <span class="tab-name">VOC</span><span class="admin-only edit-tab" onclick="editCategoryTab(event, this)">✏️</span><span class="admin-only del-level" onclick="deleteCategoryTab(event, this, 'issues-card-container')">X</span>
-            </div>
-            <div class="level-tab" data-cat="system_issue" onclick="switchCategoryTab(this, 'system_issue', 'issues-card-container')">
-                <span class="tab-name">시스템 장애</span><span class="admin-only edit-tab" onclick="editCategoryTab(event, this)">✏️</span><span class="admin-only del-level" onclick="deleteCategoryTab(event, this, 'issues-card-container')">X</span>
-            </div>
-            <button class="admin-only btn-admin add" style="width:auto; margin:0; padding: 4px 12px; font-size:12px;" onclick="addCategoryTab('issues-category-tabs')">+ 추가</button>
-        </div>
-        <div class="card-list" id="issues-card-container">
-            <div class="img-card-btn list-item-search" data-category="voc_issue" onclick="openFullscreenViewer(this.querySelector('.img-card-title').innerText, this)">
-                <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=600" alt="bg">
-                <div class="img-card-overlay"><div class="img-card-title">고객 불만 응대</div><div class="img-card-desc">대처법 요약</div></div>
-                <div class="admin-only admin-controls" style="position:absolute; top:10px; right:10px;" onclick="event.stopPropagation();">
-                    <input type="file" accept="image/*" style="display:none;" onchange="changeCardCover(event, this)">
-                    <button class="btn-admin edit" onclick="this.previousElementSibling.click()">커버변경</button>
-                    <button class="btn-admin edit" style="background:var(--uplus-dark);" onclick="changeCategory(event, this, 'issues-category-tabs', 'issues-card-container')">카테고리 이동</button>
-                    <button class="btn-admin edit" onclick="editListTitle(this)">제목수정</button>
-                    <button class="btn-admin del" onclick="this.closest('.img-card-btn').remove()">삭제</button>
-                </div>
-            </div>
-        </div>
+        <div class="level-tabs" id="issues-category-tabs" style="margin-bottom: 20px;"></div>
+        <div class="card-list" id="issues-card-container"></div>
     </div>
 
     <div id="page-fullscreen-viewer" class="page container">
         <div class="sub-header">
             <div class="sub-title" id="viewer-title">상세 보기</div>
-            <div class="admin-only admin-controls" style="margin-left: auto; margin-right: 15px;">
-                <button class="btn-admin edit" onclick="document.querySelector('#page-fullscreen-dynamic-area .file-upload').click()">+ 이미지 첨부</button>
-                <button class="btn-admin btn-edit-content" style="background:var(--uplus-dark); padding:6px 12px;" onclick="toggleContentEdit('page-fullscreen-viewer')">내용 편집하기</button>
-            </div>
+            <div class="admin-only admin-controls" style="margin-left: auto; margin-right: 15px;"></div>
         </div>
         <div class="content-toolbar admin-only" style="display:none;">
             <select onchange="execCmd('fontSize', this.value)">
@@ -1024,41 +922,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
             event.target.value = '';
         }
 
-        function openContent(title, elem) {
-            currentItemNode = elem;
-            let dataNode = elem.querySelector('.item-data');
-            if(!dataNode) {
-                dataNode = document.createElement('div');
-                dataNode.className = 'item-data';
-                dataNode.style.display = 'none';
-                dataNode.innerHTML = document.getElementById('template-page-content').innerHTML;
-                elem.appendChild(dataNode);
-            }
-            document.getElementById('page-content-dynamic-area').innerHTML = dataNode.innerHTML;
-            goToPage('page-content', -1, title);
-            document.getElementById('content-title').innerText = title;
-            
-            generateDots('#page-content-dynamic-area .content-slider', '#page-content-dynamic-area .content-dots', 'dot');
-            bindScrollDots('#page-content-dynamic-area .content-slider', '#page-content-dynamic-area .content-dots', 'dot');
-        }
-
-        function openFullscreenViewer(title, elem) {
-            currentItemNode = elem;
-            let dataNode = elem.querySelector('.item-data');
-            if(!dataNode) {
-                dataNode = document.createElement('div');
-                dataNode.className = 'item-data';
-                dataNode.style.display = 'none';
-                dataNode.innerHTML = document.getElementById('template-page-fullscreen').innerHTML;
-                elem.appendChild(dataNode);
-            }
-            document.getElementById('page-fullscreen-dynamic-area').innerHTML = dataNode.innerHTML;
-            goToPage('page-fullscreen-viewer', -1, title);
-            document.getElementById('viewer-title').innerText = title;
-            
-            generateDots('#page-fullscreen-dynamic-area .fs-slider', '#page-fullscreen-dynamic-area .fs-dots', 'fs-dot');
-            bindScrollDots('#page-fullscreen-dynamic-area .fs-slider', '#page-fullscreen-dynamic-area .fs-dots', 'fs-dot');
-        }
+        /* legacy hardcoded board viewer functions removed */
 
         function toggleAccordion(header) {
             let accordion = header.closest('.accordion');
@@ -1092,75 +956,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
             if(count === 0) homeContainer.innerHTML = '<div style="padding:16px; text-align:center; color:#999; font-size:13px;">등록된 공지사항이 없습니다.</div>';
         }
 
-        function switchCategoryTab(element, category, containerId) {
-            let tabs = element.parentElement.querySelectorAll('.level-tab');
-            tabs.forEach(t => t.classList.remove('active'));
-            element.classList.add('active');
-            let items = document.querySelectorAll('#' + containerId + ' .img-card-btn');
-            items.forEach(item => {
-                if(category === 'all' || item.dataset.category === category) item.style.display = 'block';
-                else item.style.display = 'none';
-            });
-        }
-
-        function addCategoryTab(tabContainerId) {
-            let title = prompt("추가할 카테고리 이름을 입력하세요:");
-            if(!title) return;
-            let catId = 'cat_' + Date.now();
-            let listContainerId = tabContainerId.replace('-category-tabs', '-card-container');
-            let html = `
-            <div class="level-tab" data-cat="${catId}" onclick="switchCategoryTab(this, '${catId}', '${listContainerId}')">
-                <span class="tab-name">${title}</span>
-                <span class="admin-only edit-tab" onclick="editCategoryTab(event, this)">✏️</span>
-                <span class="admin-only del-level" onclick="deleteCategoryTab(event, this, '${listContainerId}')">X</span>
-            </div>`;
-            let btn = document.querySelector('#' + tabContainerId + ' .btn-admin.add');
-            btn.insertAdjacentHTML('beforebegin', html);
-        }
-
-        function editCategoryTab(event, btn) {
-            event.stopPropagation();
-            let tab = btn.closest('.level-tab');
-            let nameSpan = tab.querySelector('.tab-name');
-            let newName = prompt("카테고리 이름을 수정하세요:", nameSpan.innerText);
-            if(newName) nameSpan.innerText = newName;
-        }
-
-        function deleteCategoryTab(event, btn, listContainerId) {
-            event.stopPropagation();
-            if(confirm("이 카테고리를 삭제하시겠습니까?\n(포함된 자료는 삭제되지 않으며 '전체' 탭에서 확인 가능합니다.)")) {
-                let tab = btn.closest('.level-tab');
-                if(tab.classList.contains('active')) {
-                    let tabContainerId = listContainerId.replace('-card-container', '-category-tabs');
-                    document.querySelector('#' + tabContainerId + ' .level-tab[data-cat="all"]').click();
-                }
-                tab.remove();
-            }
-        }
-
-        function changeCategory(event, btn, tabContainerId, listContainerId) {
-            event.stopPropagation();
-            let card = btn.closest('.img-card-btn');
-            let cats = document.querySelectorAll('#' + tabContainerId + ' .level-tab:not([data-cat="all"])');
-            if(cats.length === 0) { alert("이동할 카테고리가 없습니다."); return; }
-            let catText = "이동할 카테고리 번호를 선택하세요:\n";
-            let catArr = [];
-            cats.forEach((c, i) => {
-                catText += (i+1) + ". " + c.querySelector('.tab-name').innerText + "\n";
-                catArr.push(c.dataset.cat);
-            });
-            let sel = prompt(catText);
-            if(!sel) return;
-            let selIdx = parseInt(sel) - 1;
-            if(selIdx >= 0 && selIdx < catArr.length) {
-                card.dataset.category = catArr[selIdx];
-                alert("카테고리가 변경되었습니다.");
-                let activeTab = document.querySelector('#' + tabContainerId + ' .level-tab.active');
-                if(activeTab) switchCategoryTab(activeTab, activeTab.dataset.cat, listContainerId);
-            } else {
-                alert("잘못된 번호입니다.");
-            }
-        }
+        /* legacy hardcoded board category functions removed */
 
         function toggleContentEdit(pageId) {
             if (pageId === 'page-content') {
@@ -1262,44 +1058,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
             }
         }
 
-        function addCardRow(containerId, tabContainerId) {
-            let container = document.getElementById(containerId);
-            let catAttr = ""; let catMoveBtn = "";
-            let tabs = document.querySelectorAll('#' + tabContainerId + ' .level-tab:not([data-cat="all"])');
-            if(tabs.length > 0) {
-                let catText = "등록할 카테고리 번호를 선택하세요:\n";
-                let catArr = [];
-                tabs.forEach((c, i) => {
-                    catText += (i+1) + ". " + c.querySelector('.tab-name').innerText + "\n";
-                    catArr.push(c.dataset.cat);
-                });
-                let sel = prompt(catText);
-                let selIdx = parseInt(sel) - 1;
-                if(selIdx >= 0 && selIdx < catArr.length) catAttr = `data-category="${catArr[selIdx]}"`;
-                else catAttr = `data-category="${catArr[0]}"`;
-                catMoveBtn = `<button class="btn-admin edit" style="background:var(--uplus-dark);" onclick="changeCategory(event, this, '${tabContainerId}', '${containerId}')">카테고리 이동</button>`;
-            } else {
-                catAttr = `data-category="none"`;
-            }
-            let html = `
-            <div class="img-card-btn list-item-search" ${catAttr} onclick="openFullscreenViewer(this.querySelector('.img-card-title').innerText, this)">
-                <img src="https://images.unsplash.com/photo-1555774698-0b77e0d5fac6?q=80&w=600" alt="bg">
-                <div class="img-card-overlay">
-                    <div class="img-card-title">새로운 등록 자료</div>
-                    <div class="img-card-desc">설명을 입력하세요</div>
-                </div>
-                <div class="admin-only admin-controls" style="position:absolute; top:10px; right:10px;" onclick="event.stopPropagation();">
-                    <input type="file" accept="image/*" style="display:none;" onchange="changeCardCover(event, this)">
-                    <button class="btn-admin edit" onclick="this.previousElementSibling.click()">커버변경</button>
-                    ${catMoveBtn}
-                    <button class="btn-admin edit" onclick="editListTitle(this)">제목수정</button>
-                    <button class="btn-admin del" onclick="this.closest('.img-card-btn').remove()">삭제</button>
-                </div>
-            </div>`;
-            container.insertAdjacentHTML('afterbegin', html);
-            let activeTab = document.querySelector('#' + tabContainerId + ' .level-tab.active');
-            if(activeTab) switchCategoryTab(activeTab, activeTab.dataset.cat, containerId);
-        }
+        /* legacy hardcoded board card creation removed */
 
         function editListTitle(btn) {
             let titleSpan = btn.closest('.list-item, .img-card-btn').querySelector('.list-title, .img-card-title');
@@ -2320,59 +2079,7 @@ html.route-direct-content body.route-ready{visibility:visible;}
             });
         }
 
-function handleSliderImageUpload(event, isFullscreen) {
-            let file = event.target.files[0];
-            if(file) {
-                let reader = new FileReader();
-                reader.onload = function(e) {
-                    if (isFullscreen) {
-                        let wrapper = document.querySelector('#page-fullscreen-dynamic-area .fs-slider');
-                        let html = `<div class="fs-item" style="position:relative;"><img src="${e.target.result}" alt="img"><span class="admin-only img-delete-overlay" onclick="deleteFullscreenImage(event, this)">삭제</span></div>`;
-                        wrapper.insertAdjacentHTML('beforeend', html);
-                        generateDots('#page-fullscreen-dynamic-area .fs-slider', '#page-fullscreen-dynamic-area .fs-dots', 'fs-dot');
-                        saveCurrentContent();
-                    } else {
-                        let wrapper = document.querySelector('#page-content-dynamic-area .content-slider');
-                        let addBtn = wrapper.querySelector('.admin-add-img-btn');
-                        let html = `<div class="slider-item"><img src="${e.target.result}" class="slider-img"><span class="admin-only img-delete-overlay" onclick="deleteSliderImage(event, this)">삭제</span></div>`;
-                        addBtn.insertAdjacentHTML('beforebegin', html);
-                        generateDots('#page-content-dynamic-area .content-slider', '#page-content-dynamic-area .content-dots', 'dot');
-                        saveCurrentContent();
-                    }
-                }
-                reader.readAsDataURL(file);
-            }
-            event.target.value = ''; 
-        }
-
-        function deleteSliderImage(event, btn) {
-            event.stopPropagation();
-            if(confirm('이미지를 삭제하시겠습니까?')) {
-                btn.closest('.slider-item').remove();
-                generateDots('#page-content-dynamic-area .content-slider', '#page-content-dynamic-area .content-dots', 'dot');
-                saveCurrentContent();
-            }
-        }
-
-        function deleteFullscreenImage(event, btn) {
-            event.stopPropagation();
-            if(confirm('이미지를 삭제하시겠습니까?')) {
-                btn.closest('.fs-item').remove();
-                generateDots('#page-fullscreen-dynamic-area .fs-slider', '#page-fullscreen-dynamic-area .fs-dots', 'fs-dot');
-                saveCurrentContent();
-            }
-        }
-
-        function addKeyword() {
-            let title = prompt("추천 키워드 이름을 입력하세요:");
-            if(!title) return;
-            let url = prompt("클릭 시 이동할 링크 주소(URL)를 입력하세요:\n(입력하지 않으면 현재 페이지 유지)", "https://");
-            if(!url || url === "https://") url = "#";
-            let list = document.querySelector('#page-content-dynamic-area .content-keyword-list');
-            let html = `<button class="keyword-btn" onclick="if('${url}' !== '#') window.open('${url}', '_blank');">${title} <span class="admin-only" style="color:red; margin-left:4px;" onclick="event.stopPropagation(); this.parentElement.remove(); saveCurrentContent();">X</span></button>`;
-            list.insertAdjacentHTML('beforeend', html);
-            saveCurrentContent();
-        }
+        /* legacy template image helpers removed */
 
         // 이미지 클릭 시 모바일 화면 꽉 차게 팝업 띄우기 및 줌 허용
         document.addEventListener('click', function(e) {
