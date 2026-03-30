@@ -469,6 +469,25 @@
       display: block;
     }
 
+    .edu-slider-item {
+      aspect-ratio: 1 / 1;
+      height: auto;
+    }
+
+    .board-slider-item {
+      aspect-ratio: 4 / 5;
+      height: auto;
+    }
+
+    .edu-slider-img {
+      object-fit: cover;
+    }
+
+    .board-slider-img {
+      object-fit: contain;
+      background: #e9ecef;
+    }
+
     .slider-dots {
       display: flex;
       justify-content: center;
@@ -698,12 +717,35 @@
       scroll-snap-stop: always;
     }
 
+    .viewer-zoom-shell {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      touch-action: none;
+      position: relative;
+    }
+
     .viewer-slide img {
       width: 100%;
       height: 100%;
       object-fit: contain;
       user-select: none;
       -webkit-user-drag: none;
+      transform-origin: center center;
+      transition: transform 0.12s ease;
+      will-change: transform;
+    }
+
+    .viewer-slide.is-interacting img {
+      transition: none;
+    }
+
+    .viewer-modal.zoomed .viewer-hit {
+      pointer-events: none;
+      opacity: 0;
     }
 
     .viewer-hit {
@@ -1009,6 +1051,7 @@
     let currentPolicyType = 'mobile';
     let imageViewerImages = [];
     let imageViewerIndex = 0;
+    let imageViewerSlideStates = [];
 
     const externalLinks = {
       diagnostic: 'https://ureemuply.github.io/lguenvet-pro/',
@@ -1057,7 +1100,7 @@
     }
 
     function doLogout() {
-      window.location.href='index.html';
+      window.location.href = 'index.html';
     }
 
     function openDiagnosticUrl() {
@@ -1412,11 +1455,11 @@
 
     function buildEduContentHtml(content, images, recs, videos) {
       const imageHtml = images.length ? `
-        <div class="slider-container">
-          <div class="slider-wrapper content-slider">
+        <div class="slider-container edu-slider-container">
+          <div class="slider-wrapper content-slider edu-slider-wrapper">
             ${images.map((img, idx) => `
-              <div class="slider-item">
-                <img src="${escapeHtml(img.image_url || '')}" class="slider-img" alt="img-${idx + 1}" onclick='openImageViewer(${JSON.stringify(images.map(x => x.image_url || ''))}, ${idx})'>
+              <div class="slider-item edu-slider-item">
+                <img src="${escapeHtml(img.image_url || '')}" class="slider-img edu-slider-img" alt="img-${idx + 1}" onclick='openImageViewer(${JSON.stringify(images.map(x => x.image_url || ''))}, ${idx})'>
               </div>
             `).join('')}
           </div>
@@ -1597,11 +1640,11 @@
 
     function buildBoardDetailHtml(post, images) {
       const imageHtml = images.length ? `
-        <div class="slider-container">
-          <div class="slider-wrapper content-slider">
+        <div class="slider-container board-slider-container">
+          <div class="slider-wrapper content-slider board-slider-wrapper">
             ${images.map((img, idx) => `
-              <div class="slider-item">
-                <img src="${escapeHtml(img.image_url || '')}" class="slider-img" alt="img-${idx + 1}" onclick='openImageViewer(${JSON.stringify(images.map(x => x.image_url || ''))}, ${idx})'>
+              <div class="slider-item board-slider-item">
+                <img src="${escapeHtml(img.image_url || '')}" class="slider-img board-slider-img" alt="img-${idx + 1}" onclick='openImageViewer(${JSON.stringify(images.map(x => x.image_url || ''))}, ${idx})'>
               </div>
             `).join('')}
           </div>
@@ -1655,6 +1698,176 @@
       wrapper.scrollTo({ left: wrapper.clientWidth * idx, behavior: 'smooth' });
     }
 
+    function createViewerSlideState(slideEl) {
+      return {
+        slideEl,
+        shellEl: slideEl.querySelector('.viewer-zoom-shell'),
+        imgEl: slideEl.querySelector('img'),
+        scale: 1,
+        x: 0,
+        y: 0,
+        startX: 0,
+        startY: 0,
+        startDistance: 0,
+        startScale: 1,
+        dragging: false,
+        pinching: false,
+        lastTapAt: 0
+      };
+    }
+
+    function getTouchDistance(touches) {
+      const [a, b] = touches;
+      if (!a || !b) return 0;
+      return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+    }
+
+    function clampViewerTranslate(state) {
+      const shell = state.shellEl;
+      if (!shell) return;
+      if (state.scale <= 1) {
+        state.x = 0;
+        state.y = 0;
+        return;
+      }
+      const maxX = ((shell.clientWidth * state.scale) - shell.clientWidth) / 2;
+      const maxY = ((shell.clientHeight * state.scale) - shell.clientHeight) / 2;
+      state.x = Math.max(-maxX, Math.min(maxX, state.x));
+      state.y = Math.max(-maxY, Math.min(maxY, state.y));
+    }
+
+    function applyViewerTransform(state) {
+      if (!state || !state.imgEl) return;
+      clampViewerTranslate(state);
+      state.imgEl.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+      state.slideEl.classList.toggle('is-interacting', state.dragging || state.pinching);
+    }
+
+    function resetViewerSlideState(state, withAnimation = true) {
+      if (!state || !state.imgEl) return;
+      state.scale = 1;
+      state.x = 0;
+      state.y = 0;
+      state.dragging = false;
+      state.pinching = false;
+      if (!withAnimation) state.slideEl.classList.add('is-interacting');
+      applyViewerTransform(state);
+      if (!withAnimation) requestAnimationFrame(() => state.slideEl.classList.remove('is-interacting'));
+    }
+
+    function updateViewerZoomMode() {
+      const modal = document.getElementById('image-viewer-modal');
+      const active = imageViewerSlideStates[imageViewerIndex];
+      const zoomed = !!(active && active.scale > 1.01);
+      modal.classList.toggle('zoomed', zoomed);
+    }
+
+    function bindViewerGestureHandlers(state) {
+      if (!state || !state.shellEl) return;
+
+      state.shellEl.addEventListener('touchstart', function(event) {
+        if (event.touches.length === 2) {
+          state.pinching = true;
+          state.dragging = false;
+          state.startDistance = getTouchDistance(event.touches);
+          state.startScale = state.scale;
+          state.slideEl.classList.add('is-interacting');
+          event.preventDefault();
+          return;
+        }
+
+        if (event.touches.length === 1 && state.scale > 1) {
+          const touch = event.touches[0];
+          state.dragging = true;
+          state.pinching = false;
+          state.startX = touch.clientX - state.x;
+          state.startY = touch.clientY - state.y;
+          state.slideEl.classList.add('is-interacting');
+          event.preventDefault();
+        }
+      }, { passive: false });
+
+      state.shellEl.addEventListener('touchmove', function(event) {
+        if (state.pinching && event.touches.length === 2) {
+          const distance = getTouchDistance(event.touches);
+          if (!state.startDistance) state.startDistance = distance;
+          const nextScale = Math.max(1, Math.min(4, state.startScale * (distance / state.startDistance)));
+          state.scale = nextScale;
+          applyViewerTransform(state);
+          updateViewerZoomMode();
+          event.preventDefault();
+          return;
+        }
+
+        if (state.dragging && event.touches.length === 1) {
+          const touch = event.touches[0];
+          state.x = touch.clientX - state.startX;
+          state.y = touch.clientY - state.startY;
+          applyViewerTransform(state);
+          event.preventDefault();
+        }
+      }, { passive: false });
+
+      state.shellEl.addEventListener('touchend', function(event) {
+        if (event.touches.length === 0) {
+          const now = Date.now();
+          if (!state.pinching && !state.dragging && now - state.lastTapAt < 280) {
+            state.scale = state.scale > 1 ? 1 : 2;
+            state.x = 0;
+            state.y = 0;
+            applyViewerTransform(state);
+            updateViewerZoomMode();
+          }
+          state.lastTapAt = now;
+          state.dragging = false;
+          state.pinching = false;
+          state.slideEl.classList.remove('is-interacting');
+          if (state.scale <= 1) resetViewerSlideState(state);
+          updateViewerZoomMode();
+          return;
+        }
+
+        if (event.touches.length === 1 && state.pinching) {
+          const touch = event.touches[0];
+          state.pinching = false;
+          if (state.scale > 1) {
+            state.dragging = true;
+            state.startX = touch.clientX - state.x;
+            state.startY = touch.clientY - state.y;
+          }
+          state.slideEl.classList.remove('is-interacting');
+          updateViewerZoomMode();
+        }
+      });
+
+      state.shellEl.addEventListener('dblclick', function(event) {
+        event.preventDefault();
+        state.scale = state.scale > 1 ? 1 : 2;
+        state.x = 0;
+        state.y = 0;
+        applyViewerTransform(state);
+        updateViewerZoomMode();
+      });
+
+      state.shellEl.addEventListener('wheel', function(event) {
+        event.preventDefault();
+        const delta = event.deltaY < 0 ? 0.2 : -0.2;
+        state.scale = Math.max(1, Math.min(4, state.scale + delta));
+        if (state.scale <= 1) {
+          state.scale = 1;
+          state.x = 0;
+          state.y = 0;
+        }
+        applyViewerTransform(state);
+        updateViewerZoomMode();
+      }, { passive: false });
+    }
+
+    function resetAllViewerSlides() {
+      imageViewerSlideStates.forEach(state => resetViewerSlideState(state));
+      updateViewerZoomMode();
+    }
+
     function openImageViewer(images, startIndex = 0) {
       imageViewerImages = Array.isArray(images) ? images.filter(Boolean) : [];
       imageViewerIndex = startIndex;
@@ -1664,13 +1877,21 @@
       const dots = document.getElementById('image-viewer-dots');
 
       track.innerHTML = imageViewerImages.map(src => `
-        <div class="viewer-slide"><img src="${escapeHtml(src)}" alt="zoom"></div>
+        <div class="viewer-slide"><div class="viewer-zoom-shell"><img src="${escapeHtml(src)}" alt="zoom"></div></div>
       `).join('');
 
       dots.innerHTML = imageViewerImages.map((_, i) => `
         <span class="viewer-dot ${i === startIndex ? 'active' : ''}"></span>
       `).join('');
 
+      imageViewerSlideStates = Array.from(track.querySelectorAll('.viewer-slide')).map(slide => {
+        const state = createViewerSlideState(slide);
+        bindViewerGestureHandlers(state);
+        applyViewerTransform(state);
+        return state;
+      });
+
+      modal.classList.remove('zoomed');
       modal.classList.add('open');
       document.body.style.overflow = 'hidden';
       track.scrollTo({ left: track.clientWidth * startIndex, behavior: 'auto' });
@@ -1679,6 +1900,7 @@
         const idx = Math.round(track.scrollLeft / track.clientWidth);
         imageViewerIndex = idx;
         dots.querySelectorAll('.viewer-dot').forEach((dot, i) => dot.classList.toggle('active', i === idx));
+        updateViewerZoomMode();
       };
 
       track.onscroll = sync;
@@ -1686,11 +1908,17 @@
     }
 
     function closeImageViewer() {
-      document.getElementById('image-viewer-modal').classList.remove('open');
+      resetAllViewerSlides();
+      const modal = document.getElementById('image-viewer-modal');
+      const track = document.getElementById('image-viewer-track');
+      modal.classList.remove('open', 'zoomed');
       document.body.style.overflow = '';
+      track.onscroll = null;
     }
 
     function moveImageViewer(direction) {
+      const active = imageViewerSlideStates[imageViewerIndex];
+      if (active && active.scale > 1.01) return;
       const track = document.getElementById('image-viewer-track');
       if (!track) return;
       const next = Math.max(0, Math.min(imageViewerImages.length - 1, imageViewerIndex + direction));
